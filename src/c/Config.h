@@ -1,9 +1,9 @@
 /*
-   WatchApp: F3D Q3
+   WatchApp: Ripples 3D
    File    : Config.h
    Author  : Afonso Santos, Portugal
 
-   Last revision: 17h34 September 01 2016
+   Last revision: 20h34 September 03 2016  GMT
 */
 
 #pragma once
@@ -11,8 +11,14 @@
 // Uncommenting the next line will enable all LOG* calls.
 //#define LOG
 
-// Commenting the next line will enable antialised and thick strokes.
-//#define QEMU
+// Uncommenting the next line will enable GIF mode.
+//#define GIF
+
+// Commenting the next line will enable fast distro settings
+//#define EMU
+
+// Coment to enable antialiasing
+//#define RAW
 
 // Uncoment next line to "fake" running on APLITE/DIORITE B&W platforms.
 //#undef PBL_COLOR

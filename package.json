@@ -1,7 +1,7 @@
 {
     "author": "Karambola",
     "dependencies": {
-        "karambola": "https://builds.cloudpebble.net/12b9ec75-a4be-4ad8-86be-3ca438365233/package.tar.gz"
+        "karambola": "https://builds.cloudpebble.net/89976ea6-7d1e-4f35-97ce-c7e113d23cfb/package.tar.gz"
     },
     "keywords": [],
     "name": "ripples-3d",
@@ -25,5 +25,5 @@
             "watchface": false
         }
     },
-    "version": "1.0.0"
+    "version": "1.1.0"
 }
