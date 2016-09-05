@@ -2,8 +2,10 @@
    WatchApp: Ripples 3D
    File    : main.h
    Author  : Afonso Santos, Portugal
+   Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
+           : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 22h04 September 04 2016  GMT
+   Last revision: 22h15 September 05 2016  GMT
 */
 
 #include "Config.h"
@@ -22,16 +24,18 @@
 #define  RENDER_MODE_DEFAULT        RENDER_MODE_LINES
 #define  COLOR_MODE_DEFAULT         COLOR_MODE_DIST
 
-// Animation related: determines movement inertia.
-#define ACCEL_SAMPLER_CAPACITY    8
-
-#ifdef EMU
-  #define  ANIMATION_INTERVAL_MS    100
+#ifdef GIF
+  #define  ANTIALIASING_DEFAULT     true
+  #define  ANIMATION_INTERVAL_MS    0
 #else
-  #define  ANIMATION_INTERVAL_MS    40
+  #define  ANTIALIASING_DEFAULT     false
+
+  #ifdef EMU
+    #define  ANIMATION_INTERVAL_MS    150
+  #else
+    #define  ANIMATION_INTERVAL_MS    35
+  #endif
 #endif
 
-
-//void  click_config_provider( void *context ) ;
-//void  world_stop( ) ;
-//void  world_finalize( ) ;
+// Animation related: adds wrist movement reaction inertia to dampen accelerometer jerkiness.
+#define ACCEL_SAMPLER_CAPACITY    8

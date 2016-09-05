@@ -13,14 +13,10 @@
 
 // Uncommenting the next line will enable GIF mode.
 //#define  GIF
-#define  GIF_STOP_COUNT     1
-#define  GIF_INTERVAL_MS    0
+//#define  GIF_STOP_COUNT     2048
 
 // Commenting the next line will enable fast distro settings
 //#define EMU
-
-// Coment to enable antialiasing
-//#define RAW
 
 // Uncoment next line to use BASALT to "fake" running on APLITE/DIORITE B&W platforms with antialising on ;-)
 //#undef PBL_COLOR

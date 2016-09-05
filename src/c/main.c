@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 13h51 September 05 2016  GMT
+   Last revision: 22h15 September 05 2016  GMT
 */
 
 #include <pebble.h>
@@ -21,33 +21,10 @@
 static Window         *s_window ;
 static Layer          *s_window_layer ;
 static Layer          *s_world_layer ;
-static ActionBarLayer *s_action_bar;
+static ActionBarLayer *s_action_bar_layer ;
 
 // Obstruction related.
 static GSize available_screen ;
-
-
-typedef enum { RENDER_MODE_UNDEFINED
-             , RENDER_MODE_DOTS
-             , RENDER_MODE_LINES
-             }
-RenderMode ;
-
-static RenderMode    s_render_mode  = RENDER_MODE_DEFAULT ;
-
-#ifdef PBL_COLOR
-typedef enum { COLOR_MODE_UNDEFINED
-             , COLOR_MODE_MONO
-             , COLOR_MODE_DUAL
-             , COLOR_MODE_HEIGHT
-             , COLOR_MODE_DIST
-             }
-ColorMode ;
-
-static ColorMode  s_color_mode = COLOR_MODE_DEFAULT ;
-
-static GColor     s_colorMap[8] ;   // To be filled by colorMap_initialize( ).
-#endif
 
 
 // World related
@@ -60,16 +37,42 @@ const Q  grid_scale = Q_from_float(GRID_SCALE) ;
 static int        s_world_updateCount       = 0 ;
 static AppTimer  *s_world_updateTimer_ptr   = NULL ;
 
+
+typedef enum { RENDER_MODE_UNDEFINED
+             , RENDER_MODE_DOTS
+             , RENDER_MODE_LINES
+             }
+RenderMode ;
+
+static RenderMode    s_render_mode = RENDER_MODE_DEFAULT ;
+
+void
+renderMode_change_click_handler
+( ClickRecognizerRef recognizer
+, void              *context
+)
+{
+  // Cycle trough the render modes.
+  switch (s_render_mode)
+  {
+    case RENDER_MODE_DOTS:
+     s_render_mode = RENDER_MODE_LINES ;
+     break ;
+
+   case RENDER_MODE_LINES:
+     s_render_mode = RENDER_MODE_DOTS ;
+     break ;
+
+   default:
+     s_render_mode = RENDER_MODE_DEFAULT ;
+     break ;
+  } ;
+}
+
+
 // Forward declare.
-void  world_stop( ) ;
-void  world_finalize( ) ;
-
-
-#ifndef GIF
-Sampler   *sampler_accelX = NULL ;    // To be allocated at sampler_initialize( ).
-Sampler   *sampler_accelY = NULL ;    // To be allocated at sampler_initialize( ).
-Sampler   *sampler_accelZ = NULL ;    // To be allocated at sampler_initialize( ).
-#endif
+//void  world_stop( ) ;
+//void  world_finalize( ) ;
 
 
 // Camera related
@@ -80,7 +83,51 @@ static int32_t s_cam_rotZangle   = 0 ;
 static int32_t s_cam_rotZangleStep ;
 
 
-#ifndef GIF
+#ifdef GIF
+void world_update_timer_handler( void *data ) ;
+
+void
+gifStepper_advance_click_handler
+( ClickRecognizerRef recognizer
+, void              *context
+)
+{
+  if (s_world_updateTimer_ptr == NULL)
+    s_world_updateTimer_ptr = app_timer_register( 0, world_update_timer_handler, NULL ) ;   // Schedule a world update.
+}
+#else
+Sampler   *sampler_accelX = NULL ;    // To be allocated at sampler_initialize( ).
+Sampler   *sampler_accelY = NULL ;    // To be allocated at sampler_initialize( ).
+Sampler   *sampler_accelZ = NULL ;    // To be allocated at sampler_initialize( ).
+
+
+void
+sampler_initialize
+( )
+{
+  sampler_accelX = Sampler_new( ACCEL_SAMPLER_CAPACITY ) ;
+  sampler_accelY = Sampler_new( ACCEL_SAMPLER_CAPACITY ) ;
+  sampler_accelZ = Sampler_new( ACCEL_SAMPLER_CAPACITY ) ;
+
+  for ( int i = 0  ;  i < ACCEL_SAMPLER_CAPACITY  ;  ++i )
+  {
+    Sampler_push( sampler_accelX,  -81 ) ;   // STEADY viewPoint attractor.
+    Sampler_push( sampler_accelY, -816 ) ;   // STEADY viewPoint attractor.
+    Sampler_push( sampler_accelZ, -571 ) ;   // STEADY viewPoint attractor.
+  }
+}
+
+
+void
+sampler_finalize
+( )
+{
+  free( Sampler_free( sampler_accelX ) ) ; sampler_accelX = NULL ;
+  free( Sampler_free( sampler_accelY ) ) ; sampler_accelY = NULL ;
+  free( Sampler_free( sampler_accelZ ) ) ; sampler_accelZ = NULL ;
+}
+
+
 // Acellerometer handlers.
 void
 accel_data_service_handler
@@ -106,25 +153,6 @@ cam_config
   // setup 3D camera
   CamQ3_lookAtOriginUpwards( &s_cam, &rotatedVP, s_cam_zoom, CAM_PROJECTION_PERSPECTIVE ) ;
 }
-
-
-#ifndef GIF
-void
-sampler_initialize
-( )
-{
-  sampler_accelX = Sampler_new( ACCEL_SAMPLER_CAPACITY ) ;
-  sampler_accelY = Sampler_new( ACCEL_SAMPLER_CAPACITY ) ;
-  sampler_accelZ = Sampler_new( ACCEL_SAMPLER_CAPACITY ) ;
-
-  for ( int i = 0  ;  i < ACCEL_SAMPLER_CAPACITY  ;  ++i )
-  {
-    Sampler_push( sampler_accelX,  -81 ) ;   // STEADY viewPoint attractor.
-    Sampler_push( sampler_accelY, -816 ) ;   // STEADY viewPoint attractor.
-    Sampler_push( sampler_accelZ, -571 ) ;   // STEADY viewPoint attractor.
-  }
-}
-#endif
 
 
 void
@@ -164,6 +192,50 @@ function_initialize
 
 
 #ifdef PBL_COLOR
+typedef enum { COLOR_MODE_UNDEFINED
+             , COLOR_MODE_MONO
+             , COLOR_MODE_DUAL
+             , COLOR_MODE_HEIGHT
+             , COLOR_MODE_DIST
+             }
+ColorMode ;
+
+static ColorMode  s_color_mode = COLOR_MODE_DEFAULT ;
+
+void
+colorMode_change_click_handler
+( ClickRecognizerRef recognizer
+, void              *context
+)
+{
+  // Cycle trough the render modes.
+  switch (s_color_mode)
+  {
+    case COLOR_MODE_MONO:
+     s_color_mode = COLOR_MODE_DUAL ;
+     break ;
+
+    case COLOR_MODE_DUAL:
+     s_color_mode = COLOR_MODE_HEIGHT ;
+     break ;
+
+   case COLOR_MODE_HEIGHT:
+     s_color_mode = COLOR_MODE_DIST ;
+     break ;
+
+   case COLOR_MODE_DIST:
+     s_color_mode = COLOR_MODE_MONO ;
+     break ;
+
+   default:
+     s_color_mode = RENDER_MODE_DEFAULT ;
+     break ;
+  } ;
+}
+
+
+static GColor  s_colorMap[8] ;
+
 void
 colorMap_initialize
 ( )
@@ -176,6 +248,50 @@ colorMap_initialize
   s_colorMap[2] = GColorYellow ;
   s_colorMap[1] = GColorGreen ;
   s_colorMap[0] = GColorVividCerulean ;
+}
+
+
+void
+set_stroke_color
+( GContext *gCtx
+, const int i
+, const int j
+)
+{
+  switch (s_color_mode)
+  {
+    case COLOR_MODE_DUAL:
+      if (worldPoints[i][j].z > Q_0)
+        graphics_context_set_stroke_color( gCtx, GColorMelon ) ;           //  z > 0
+      else
+        graphics_context_set_stroke_color( gCtx, GColorVividCerulean ) ;   //  z <= 0
+    break ;
+
+    case COLOR_MODE_HEIGHT:
+      graphics_context_set_stroke_color( gCtx, s_colorMap[((worldPoints[i][j].z + Q_1) >> 14) & 0b111] ) ;   // ((z + 1) * 4) % 8
+    break ;
+
+    case COLOR_MODE_DIST:
+      graphics_context_set_stroke_color( gCtx, s_colorMap[((dist_xy[i][j]) >> 15) & 0b111] ) ;               //  (dist * 2) % 8
+    break ;
+
+    case COLOR_MODE_MONO:
+    default:
+      graphics_context_set_stroke_color( gCtx, GColorWhite ) ;
+    break ;
+  } ;
+}
+
+
+static bool s_antialiasing = ANTIALIASING_DEFAULT ;
+
+void
+antialiasing_change_click_handler
+( ClickRecognizerRef recognizer
+, void              *context
+)
+{
+  s_antialiasing = !s_antialiasing ;
 }
 #endif
 
@@ -290,44 +406,6 @@ world_update
 }
 
 
-#ifdef LOG
-static int s_world_draw_count = 0 ;
-#endif
-
-#ifdef PBL_COLOR
-void
-set_stroke_color
-( GContext *gCtx
-, const int i
-, const int j
-)
-{
-  switch (s_color_mode)
-  {
-    case COLOR_MODE_DUAL:
-      if (worldPoints[i][j].z > Q_0)
-        graphics_context_set_stroke_color( gCtx, GColorMelon ) ;
-      else
-        graphics_context_set_stroke_color( gCtx, GColorVividCerulean ) ;
-    break ;
-
-    case COLOR_MODE_HEIGHT:
-      graphics_context_set_stroke_color( gCtx, s_colorMap[((worldPoints[i][j].z + Q_1) >> 14) & 0b111] ) ;
-    break ;
-
-    case COLOR_MODE_DIST:
-      graphics_context_set_stroke_color( gCtx, s_colorMap[((dist_xy[i][j]) >> 15) & 0b111] ) ;
-    break ;
-
-    case COLOR_MODE_MONO:
-    default:
-      graphics_context_set_stroke_color( gCtx, GColorWhite ) ;
-    break ;
-  } ;
-}
-#endif
-
-
 void
 world_draw
 ( Layer    *me
@@ -336,13 +414,9 @@ world_draw
 {
   LOGD( "world_draw:: s_world_updateCount = %d", s_world_updateCount ) ;
 
-#ifdef RAW
-  graphics_context_set_antialiased( gCtx, false ) ;
+#ifdef PBL_COLOR
+  graphics_context_set_antialiased( gCtx, s_antialiasing ) ;
 #else
-  graphics_context_set_antialiased( gCtx, true ) ;
-#endif
-
-#ifndef PBL_COLOR
   graphics_context_set_stroke_color( gCtx, GColorWhite ) ;
 #endif
 
@@ -380,7 +454,6 @@ world_draw
 #ifdef PBL_COLOR
           set_stroke_color( gCtx, i, j ) ;
 #endif
-
           graphics_draw_pixel( gCtx, screenPoints[i][j] ) ;
         }
     break ;   //  case RENDER_MODE_DOTS:
@@ -393,10 +466,7 @@ world_draw
 #ifdef PBL_COLOR
           set_stroke_color( gCtx, i, j ) ;
 #endif
-
-          GPoint *p1 = &screenPoints[i][j] ;
-          GPoint *p2 = &screenPoints[i][j-1] ;
-          graphics_draw_line( gCtx, *p1, *p2 ) ;
+          graphics_draw_line( gCtx, screenPoints[i][j], screenPoints[i][j-1] ) ;
         }
 
       // x parallel lines.
@@ -406,10 +476,7 @@ world_draw
 #ifdef PBL_COLOR
           set_stroke_color( gCtx, i, j ) ;
 #endif
-
-          GPoint *p1 = &screenPoints[i][j] ;
-          GPoint *p2 = &screenPoints[i-1][j] ;
-          graphics_draw_line( gCtx, *p1, *p2 ) ;
+          graphics_draw_line( gCtx, screenPoints[i][j], screenPoints[i-1][j] ) ;
         }
 
     break ;   //  case RENDER_MODE_LINES:
@@ -418,18 +485,6 @@ world_draw
     break ;
   }
 }
-
-
-#ifndef GIF
-void
-sampler_finalize
-( )
-{
-  free( Sampler_free( sampler_accelX ) ) ; sampler_accelX = NULL ;
-  free( Sampler_free( sampler_accelY ) ) ; sampler_accelY = NULL ;
-  free( Sampler_free( sampler_accelZ ) ) ; sampler_accelZ = NULL ;
-}
-#endif
 
 
 void
@@ -451,10 +506,8 @@ world_update_timer_handler
 
 #ifdef GIF
   if (s_world_updateCount < GIF_STOP_COUNT)
-    s_world_updateTimer_ptr = app_timer_register( GIF_INTERVAL_MS, world_update_timer_handler, data ) ;
-#else
-  s_world_updateTimer_ptr = app_timer_register( ANIMATION_INTERVAL_MS, world_update_timer_handler, data ) ;
 #endif
+  s_world_updateTimer_ptr = app_timer_register( ANIMATION_INTERVAL_MS, world_update_timer_handler, data ) ;
 }
 
 
@@ -497,76 +550,6 @@ unobstructed_area_change_handler
 
 
 void
-renderMode_change_click_handler
-( ClickRecognizerRef recognizer
-, void              *context
-)
-{
-  // Cycle trough the render modes.
-  switch (s_render_mode)
-  {
-    case RENDER_MODE_DOTS:
-     s_render_mode = RENDER_MODE_LINES ;
-     break ;
-
-   case RENDER_MODE_LINES:
-     s_render_mode = RENDER_MODE_DOTS ;
-     break ;
-
-   default:
-     s_render_mode = RENDER_MODE_DEFAULT ;
-     break ;
-  } ;
-}
-
-
-#ifdef PBL_COLOR
-void
-colorMode_change_click_handler
-( ClickRecognizerRef recognizer
-, void              *context
-)
-{
-  // Cycle trough the render modes.
-  switch (s_color_mode)
-  {
-    case COLOR_MODE_MONO:
-     s_color_mode = COLOR_MODE_DUAL ;
-     break ;
-
-    case COLOR_MODE_DUAL:
-     s_color_mode = COLOR_MODE_HEIGHT ;
-     break ;
-
-   case COLOR_MODE_HEIGHT:
-     s_color_mode = COLOR_MODE_DIST ;
-     break ;
-
-   case COLOR_MODE_DIST:
-     s_color_mode = COLOR_MODE_MONO ;
-     break ;
-
-   default:
-     s_color_mode = RENDER_MODE_DEFAULT ;
-     break ;
-  } ;
-}
-#endif
-
-
-#ifdef GIF
-void
-gifStepper_advance_click_handler
-( ClickRecognizerRef recognizer
-, void              *context
-)
-{
-  app_timer_register( 0, world_update_timer_handler, NULL ) ;   // Schedule a world update.
-}
-#endif
-
-
-void
 click_config_provider
 ( void *context )
 {
@@ -584,23 +567,28 @@ click_config_provider
   window_single_click_subscribe( BUTTON_ID_DOWN
                                , (ClickHandler) gifStepper_advance_click_handler
                                ) ;
+#else
+  #ifdef PBL_COLOR
+  window_single_click_subscribe( BUTTON_ID_DOWN
+                               , (ClickHandler) antialiasing_change_click_handler
+                               ) ;
+  #endif
 #endif
 }
 
 
 void
 window_load
-( Window *s_window )
+( Window *window )
 {
-  s_window_layer    = window_get_root_layer( s_window ) ;
+  s_window_layer    = window_get_root_layer( window ) ;
   available_screen  = layer_get_unobstructed_bounds( s_window_layer ).size ;
 
-  s_action_bar = action_bar_layer_create( ) ;
-  action_bar_layer_add_to_window( s_action_bar, s_window ) ;
-  action_bar_layer_set_click_config_provider( s_action_bar, click_config_provider ) ;
+  s_action_bar_layer = action_bar_layer_create( ) ;
+  action_bar_layer_add_to_window( s_action_bar_layer, s_window ) ;
+  action_bar_layer_set_click_config_provider( s_action_bar_layer, click_config_provider ) ;
 
-  GRect bounds = layer_get_frame( s_window_layer ) ;
-  s_world_layer = layer_create( bounds ) ;
+  s_world_layer = layer_create( layer_get_frame( s_window_layer ) ) ;
   layer_set_update_proc( s_world_layer, world_draw ) ;
   layer_add_child( s_window_layer, s_world_layer ) ;
 
@@ -614,7 +602,7 @@ window_load
 
 void
 window_unload
-( Window *s_window )
+( Window *window )
 {
   world_stop( ) ;
   unobstructed_area_service_unsubscribe( ) ;
