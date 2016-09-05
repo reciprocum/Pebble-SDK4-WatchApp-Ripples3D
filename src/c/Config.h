@@ -3,16 +3,18 @@
    File    : Config.h
    Author  : Afonso Santos, Portugal
 
-   Last revision: 20h34 September 03 2016  GMT
+   Last revision: 12h24 September 05 2016  GMT
 */
 
 #pragma once
 
 // Uncommenting the next line will enable all LOG* calls.
-//#define LOG
+#define LOG
 
 // Uncommenting the next line will enable GIF mode.
-//#define GIF
+#define  GIF
+#define  GIF_STOP_COUNT     1
+#define  GIF_INTERVAL_MS    0
 
 // Commenting the next line will enable fast distro settings
 //#define EMU
@@ -20,7 +22,7 @@
 // Coment to enable antialiasing
 //#define RAW
 
-// Uncoment next line to "fake" running on APLITE/DIORITE B&W platforms.
+// Uncoment next line to use BASALT to "fake" running on APLITE/DIORITE B&W platforms with antialising on ;-)
 //#undef PBL_COLOR
 
 #ifdef LOG

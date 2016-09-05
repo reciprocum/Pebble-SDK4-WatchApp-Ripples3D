@@ -3,7 +3,7 @@
    File    : main.h
    Author  : Afonso Santos, Portugal
 
-   Last revision: 23h04 September 03 2016  GMT
+   Last revision: 22h04 September 04 2016  GMT
 */
 
 #include "Config.h"
@@ -16,27 +16,22 @@
   #define GRID_LINES        31
 #endif
 
-#define GRID_SCALE             6.28f
+#define  GRID_SCALE                 6.28f
+#define  CAM3D_DISTANCEFROMORIGIN   8.75f
 
-// Animation related
+#define  RENDER_MODE_DEFAULT        RENDER_MODE_LINES
+#define  COLOR_MODE_DEFAULT         COLOR_MODE_DIST
+
+// Animation related: determines movement inertia.
 #define ACCEL_SAMPLER_CAPACITY    8
 
 #ifdef EMU
-  #define  ANIMATION_INTERVAL_MS    175
+  #define  ANIMATION_INTERVAL_MS    100
 #else
   #define  ANIMATION_INTERVAL_MS    40
 #endif
 
-#define  RENDER_MODE_DEFAULT        RENDER_MODE_LINES
-#define  CAM3D_DISTANCEFROMORIGIN   (Q_from_float(8.75f))
 
-
-typedef enum { RENDER_MODE_UNDEFINED
-             , RENDER_MODE_DOTS
-             , RENDER_MODE_LINES
-             }
-RenderMode ;
-
-
-static void  set_render_mode( RenderMode pRenderMode ) ;
-void  click_config_provider( void *context ) ;
+//void  click_config_provider( void *context ) ;
+//void  world_stop( ) ;
+//void  world_finalize( ) ;
