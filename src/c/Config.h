@@ -9,10 +9,10 @@
 #pragma once
 
 // Uncommenting the next line will enable all LOG* calls.
-#define LOG
+//#define LOG
 
 // Uncommenting the next line will enable GIF mode.
-#define  GIF
+//#define  GIF
 #define  GIF_STOP_COUNT     1
 #define  GIF_INTERVAL_MS    0
 

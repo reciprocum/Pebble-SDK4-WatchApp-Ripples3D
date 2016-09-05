@@ -2,8 +2,10 @@
    WatchApp: Ripples 3D
    File    : main.c
    Author  : Afonso Santos, Portugal
+   Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
+           : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 12h24 September 05 2016  GMT
+   Last revision: 13h51 September 05 2016  GMT
 */
 
 #include <pebble.h>
