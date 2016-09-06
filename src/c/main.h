@@ -22,7 +22,12 @@
 #define  CAM3D_DISTANCEFROMORIGIN   8.75f
 
 #define  RENDER_MODE_DEFAULT        RENDER_MODE_LINES
-#define  COLOR_MODE_DEFAULT         COLOR_MODE_DIST
+
+#ifdef PBL_COLOR
+  #define  COLOR_MODE_DEFAULT       COLOR_MODE_DIST
+#else
+  #define  COLOR_MODE_DEFAULT       COLOR_MODE_MONO
+#endif
 
 #ifdef GIF
   #define  ANTIALIASING_DEFAULT     true

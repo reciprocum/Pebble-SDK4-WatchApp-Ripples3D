@@ -5,13 +5,17 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 22h15 September 05 2016  GMT
+   Last revision: 16h25 September 06 2016  GMT
 */
 
 #include <pebble.h>
 #include <karambola/Q3.h>
 #include <karambola/CamQ3.h>
 #include <karambola/Sampler.h>
+
+#ifndef PBL_COLOR
+  #include <karambola/Draw2D.h>
+#endif
 
 #include "main.h"
 #include "Config.h"
@@ -68,11 +72,6 @@ renderMode_change_click_handler
      break ;
   } ;
 }
-
-
-// Forward declare.
-//void  world_stop( ) ;
-//void  world_finalize( ) ;
 
 
 // Camera related
@@ -192,15 +191,26 @@ function_initialize
 
 
 #ifdef PBL_COLOR
-typedef enum { COLOR_MODE_UNDEFINED
-             , COLOR_MODE_MONO
-             , COLOR_MODE_DUAL
+typedef enum { COLOR_MODE_MONO
+             , COLOR_MODE_SIGNAL
              , COLOR_MODE_HEIGHT
              , COLOR_MODE_DIST
              }
 ColorMode ;
+#else
+typedef enum { COLOR_MODE_MONO
+             , COLOR_MODE_SIGNAL
+             , COLOR_MODE_DIST
+             }
+ColorMode ;
+#endif
 
+
+static bool       s_isInverted ;
+static GColor     s_background_color ;
+static GColor     s_stroke_color ;
 static ColorMode  s_color_mode = COLOR_MODE_DEFAULT ;
+
 
 void
 colorMode_change_click_handler
@@ -208,18 +218,39 @@ colorMode_change_click_handler
 , void              *context
 )
 {
-  // Cycle trough the render modes.
+#ifdef PBL_COLOR
+  // Cycle trough the color modes.
   switch (s_color_mode)
   {
     case COLOR_MODE_MONO:
-     s_color_mode = COLOR_MODE_DUAL ;
+     s_color_mode = COLOR_MODE_SIGNAL ;
      break ;
 
-    case COLOR_MODE_DUAL:
+    case COLOR_MODE_SIGNAL:
+     s_color_mode = COLOR_MODE_DIST ;
+     break ;
+
+   case COLOR_MODE_DIST:
      s_color_mode = COLOR_MODE_HEIGHT ;
      break ;
 
    case COLOR_MODE_HEIGHT:
+     s_color_mode = COLOR_MODE_MONO ;
+     break ;
+
+   default:
+     s_color_mode = RENDER_MODE_DEFAULT ;
+     break ;
+  } ;
+#else
+  // Cycle trough the color modes.
+  switch (s_color_mode)
+  {
+    case COLOR_MODE_MONO:
+     s_color_mode = COLOR_MODE_SIGNAL ;
+     break ;
+
+    case COLOR_MODE_SIGNAL:
      s_color_mode = COLOR_MODE_DIST ;
      break ;
 
@@ -231,15 +262,21 @@ colorMode_change_click_handler
      s_color_mode = RENDER_MODE_DEFAULT ;
      break ;
   } ;
+#endif
 }
 
 
+#ifdef PBL_COLOR
 static GColor  s_colorMap[8] ;
 
 void
-colorMap_initialize
+color_initialize
 ( )
 {
+  s_stroke_color     = GColorWhite ;
+  s_background_color = GColorBlack ;
+  s_isInverted       = false ;
+  
   s_colorMap[7] = GColorWhite ;
   s_colorMap[6] = GColorMelon ;
   s_colorMap[5] = GColorMagenta ;
@@ -260,30 +297,30 @@ set_stroke_color
 {
   switch (s_color_mode)
   {
-    case COLOR_MODE_DUAL:
+    case COLOR_MODE_SIGNAL:
       if (worldPoints[i][j].z > Q_0)
         graphics_context_set_stroke_color( gCtx, GColorMelon ) ;           //  z > 0
       else
         graphics_context_set_stroke_color( gCtx, GColorVividCerulean ) ;   //  z <= 0
     break ;
 
-    case COLOR_MODE_HEIGHT:
-      graphics_context_set_stroke_color( gCtx, s_colorMap[((worldPoints[i][j].z + Q_1) >> 14) & 0b111] ) ;   // ((z + 1) * 4) % 8
-    break ;
-
     case COLOR_MODE_DIST:
       graphics_context_set_stroke_color( gCtx, s_colorMap[((dist_xy[i][j]) >> 15) & 0b111] ) ;               //  (dist * 2) % 8
     break ;
 
+    case COLOR_MODE_HEIGHT:
+      graphics_context_set_stroke_color( gCtx, s_colorMap[((worldPoints[i][j].z + Q_1) >> 14) & 0b111] ) ;   // ((z + 1) * 4) % 8
+    break ;
+
     case COLOR_MODE_MONO:
     default:
-      graphics_context_set_stroke_color( gCtx, GColorWhite ) ;
+      graphics_context_set_stroke_color( gCtx, s_stroke_color ) ;
     break ;
   } ;
 }
 
 
-static bool s_antialiasing = ANTIALIASING_DEFAULT ;
+static bool   s_antialiasing = ANTIALIASING_DEFAULT ;
 
 void
 antialiasing_change_click_handler
@@ -292,6 +329,75 @@ antialiasing_change_click_handler
 )
 {
   s_antialiasing = !s_antialiasing ;
+}
+#else
+void
+color_initialize
+( )
+{
+  s_stroke_color     = GColorBlack ;
+  s_background_color = GColorWhite ;
+  s_isInverted       = true ;
+}
+
+
+ink_t
+get_stroke_ink
+( const int i
+, const int j
+)
+{
+  switch (s_color_mode)
+  {
+    case COLOR_MODE_MONO:
+      return INK100 ;
+    break ;
+    
+    case COLOR_MODE_SIGNAL:
+      return (worldPoints[i][j].z > Q_0)  ?  INK100  :  INK33 ;
+    break ;
+
+    case COLOR_MODE_DIST:
+      switch (((dist_xy[i][j]) >> 15) & 0b1 )
+      {
+        case 1:
+          return INK33 ;
+
+        case 0:
+        default:
+          return INK100 ;
+        break ;
+      }
+    break ;
+
+    default:
+      return INK100 ;
+    break ;
+  } ;
+}
+
+
+void
+invert_change_click_handler
+( ClickRecognizerRef recognizer
+, void              *context
+)
+{
+  s_isInverted = !s_isInverted ;
+
+  if (s_isInverted)
+  {
+    s_stroke_color     = GColorBlack ;
+    s_background_color = GColorWhite ;
+  }
+  else
+  {
+    s_stroke_color     = GColorWhite ;
+    s_background_color = GColorBlack ;
+  }
+
+  window_set_background_color( s_window, s_background_color ) ;
+  action_bar_layer_set_background_color( s_action_bar_layer, s_background_color) ;
 }
 #endif
 
@@ -310,9 +416,7 @@ world_initialize
   s_cam_rotZangle     = 0 ;
   s_cam_rotZangleStep = TRIG_MAX_ANGLE >> 9 ;  //  2 * PI / 512
 
-#ifdef PBL_COLOR
-  colorMap_initialize( ) ;
-#endif
+  color_initialize( ) ;
 }
 
 
@@ -417,7 +521,7 @@ world_draw
 #ifdef PBL_COLOR
   graphics_context_set_antialiased( gCtx, s_antialiasing ) ;
 #else
-  graphics_context_set_stroke_color( gCtx, GColorWhite ) ;
+  graphics_context_set_stroke_color( gCtx, s_stroke_color ) ;
 #endif
 
   // Draw f(x,y)
@@ -465,8 +569,12 @@ world_draw
         {
 #ifdef PBL_COLOR
           set_stroke_color( gCtx, i, j ) ;
-#endif
           graphics_draw_line( gCtx, screenPoints[i][j], screenPoints[i][j-1] ) ;
+#else
+          GPoint *p0 = &screenPoints[i][j] ;
+          GPoint *p1 = &screenPoints[i][j-1] ;
+          Draw2D_line_pattern( gCtx, p0->x, p0->y, p1->x, p1->y, get_stroke_ink( i, j ) ) ;
+#endif
         }
 
       // x parallel lines.
@@ -475,8 +583,12 @@ world_draw
         {
 #ifdef PBL_COLOR
           set_stroke_color( gCtx, i, j ) ;
-#endif
           graphics_draw_line( gCtx, screenPoints[i][j], screenPoints[i-1][j] ) ;
+#else
+          GPoint *p0 = &screenPoints[i][j] ;
+          GPoint *p1 = &screenPoints[i-1][j] ;
+          Draw2D_line_pattern( gCtx, p0->x, p0->y, p1->x, p1->y, get_stroke_ink( i, j ) ) ;
+#endif
         }
 
     break ;   //  case RENDER_MODE_LINES:
@@ -553,11 +665,9 @@ void
 click_config_provider
 ( void *context )
 {
-#ifdef PBL_COLOR
   window_single_click_subscribe( BUTTON_ID_UP
                                , (ClickHandler) colorMode_change_click_handler
                                ) ;
-#endif
 
   window_single_click_subscribe( BUTTON_ID_SELECT
                                , (ClickHandler) renderMode_change_click_handler
@@ -571,6 +681,10 @@ click_config_provider
   #ifdef PBL_COLOR
   window_single_click_subscribe( BUTTON_ID_DOWN
                                , (ClickHandler) antialiasing_change_click_handler
+                               ) ;
+  #else
+  window_single_click_subscribe( BUTTON_ID_DOWN
+                               , (ClickHandler) invert_change_click_handler
                                ) ;
   #endif
 #endif
@@ -586,6 +700,7 @@ window_load
 
   s_action_bar_layer = action_bar_layer_create( ) ;
   action_bar_layer_add_to_window( s_action_bar_layer, s_window ) ;
+  action_bar_layer_set_background_color( s_action_bar_layer, s_background_color) ;
   action_bar_layer_set_click_config_provider( s_action_bar_layer, click_config_provider ) ;
 
   s_world_layer = layer_create( layer_get_frame( s_window_layer ) ) ;
@@ -617,7 +732,7 @@ app_init
   world_initialize( ) ;
 
   s_window = window_create( ) ;
-  window_set_background_color( s_window, GColorBlack ) ;
+  window_set_background_color( s_window, s_background_color ) ;
  
   window_set_window_handlers( s_window
                             , (WindowHandlers)

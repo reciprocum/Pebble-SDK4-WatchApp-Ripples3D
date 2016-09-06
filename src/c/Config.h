@@ -3,7 +3,7 @@
    File    : Config.h
    Author  : Afonso Santos, Portugal
 
-   Last revision: 12h24 September 05 2016  GMT
+   Last revision: 16h35 September 06 2016  GMT
 */
 
 #pragma once
@@ -13,7 +13,7 @@
 
 // Uncommenting the next line will enable GIF mode.
 //#define  GIF
-//#define  GIF_STOP_COUNT     2048
+//#define  GIF_STOP_COUNT     1
 
 // Commenting the next line will enable fast distro settings
 //#define EMU
