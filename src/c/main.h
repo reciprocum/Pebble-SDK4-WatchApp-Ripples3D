@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 22h15 September 05 2016  GMT
+   Last revision: 13h45 September 07 2016  GMT
 */
 
 #include "Config.h"
@@ -21,7 +21,7 @@
 #define  GRID_SCALE                 6.28f
 #define  CAM3D_DISTANCEFROMORIGIN   8.75f
 
-#define  RENDER_MODE_DEFAULT        RENDER_MODE_LINES
+#define  PLOTTER_MODE_DEFAULT       PLOTTER_MODE_LINES
 
 #ifdef PBL_COLOR
   #define  COLOR_MODE_DEFAULT       COLOR_MODE_DIST

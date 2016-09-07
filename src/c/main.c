@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 16h25 September 06 2016  GMT
+   Last revision: 13h45 September 07 2016  GMT
 */
 
 #include <pebble.h>
@@ -32,9 +32,9 @@ static GSize available_screen ;
 
 
 // World related
-Q3     worldPoints [GRID_LINES][GRID_LINES] ;
-Q      dist_xy     [GRID_LINES][GRID_LINES] ;
-GPoint screenPoints[GRID_LINES][GRID_LINES] ;
+Q3     function_worldPoints [GRID_LINES][GRID_LINES] ;
+GPoint function_screenPoints[GRID_LINES][GRID_LINES] ;
+Q      dist_xy              [GRID_LINES][GRID_LINES] ;
 
 const Q  grid_scale = Q_from_float(GRID_SCALE) ;
 
@@ -42,33 +42,38 @@ static int        s_world_updateCount       = 0 ;
 static AppTimer  *s_world_updateTimer_ptr   = NULL ;
 
 
-typedef enum { RENDER_MODE_UNDEFINED
-             , RENDER_MODE_DOTS
-             , RENDER_MODE_LINES
+typedef enum { PLOTTER_MODE_UNDEFINED
+             , PLOTTER_MODE_DOTS
+             , PLOTTER_MODE_LINES
+             , PLOTTER_MODE_GRID
              }
-RenderMode ;
+PlotterMode ;
 
-static RenderMode    s_render_mode = RENDER_MODE_DEFAULT ;
+static PlotterMode    s_plotter_mode = PLOTTER_MODE_DEFAULT ;
 
 void
-renderMode_change_click_handler
+plotterMode_change_click_handler
 ( ClickRecognizerRef recognizer
 , void              *context
 )
 {
-  // Cycle trough the render modes.
-  switch (s_render_mode)
+  // Cycle trough the plotter modes.
+  switch (s_plotter_mode)
   {
-    case RENDER_MODE_DOTS:
-     s_render_mode = RENDER_MODE_LINES ;
+    case PLOTTER_MODE_DOTS:
+     s_plotter_mode = PLOTTER_MODE_LINES ;
      break ;
 
-   case RENDER_MODE_LINES:
-     s_render_mode = RENDER_MODE_DOTS ;
+   case PLOTTER_MODE_LINES:
+     s_plotter_mode = PLOTTER_MODE_GRID ;
+     break ;
+
+   case PLOTTER_MODE_GRID:
+     s_plotter_mode = PLOTTER_MODE_DOTS ;
      break ;
 
    default:
-     s_render_mode = RENDER_MODE_DEFAULT ;
+     s_plotter_mode = PLOTTER_MODE_DEFAULT ;
      break ;
   } ;
 }
@@ -144,7 +149,13 @@ cam_config
 )
 {
   Q3 scaledVP ;
-  Q3_scaTo( &scaledVP, Q_from_float(CAM3D_DISTANCEFROMORIGIN), pViewPoint ) ;
+
+  Q3_scaTo( &scaledVP
+          , Q_from_float(CAM3D_DISTANCEFROMORIGIN)
+          , (pViewPoint->x != Q_0  ||  pViewPoint->y != Q_0)          // Viewpoint not on Z axis ?
+            ? pViewPoint                                              // Use original view point.
+            : &(Q3){ .x = Q_1>>4, .y = Q_1>>4, .z = pViewPoint->z }
+          ) ;
 
   Q3 rotatedVP ;
   Q3_rotZ( &rotatedVP, &scaledVP, pRotZangle ) ;
@@ -180,8 +191,8 @@ function_initialize
         ; j++            , y += gridStep
         )
     {
-      worldPoints[i][j].x = x ;
-      worldPoints[i][j].y = y ;
+      function_worldPoints[i][j].x = x ;
+      function_worldPoints[i][j].y = y ;
 
       const Q y2 = Q_mul(y, y) ;
       dist_xy[i][j] = Q_sqrt( x2 + y2 ) ;
@@ -239,7 +250,7 @@ colorMode_change_click_handler
      break ;
 
    default:
-     s_color_mode = RENDER_MODE_DEFAULT ;
+     s_color_mode = PLOTTER_MODE_DEFAULT ;
      break ;
   } ;
 #else
@@ -259,7 +270,7 @@ colorMode_change_click_handler
      break ;
 
    default:
-     s_color_mode = RENDER_MODE_DEFAULT ;
+     s_color_mode = PLOTTER_MODE_DEFAULT ;
      break ;
   } ;
 #endif
@@ -298,7 +309,7 @@ set_stroke_color
   switch (s_color_mode)
   {
     case COLOR_MODE_SIGNAL:
-      if (worldPoints[i][j].z > Q_0)
+      if (function_worldPoints[i][j].z > Q_0)
         graphics_context_set_stroke_color( gCtx, GColorMelon ) ;           //  z > 0
       else
         graphics_context_set_stroke_color( gCtx, GColorVividCerulean ) ;   //  z <= 0
@@ -309,7 +320,7 @@ set_stroke_color
     break ;
 
     case COLOR_MODE_HEIGHT:
-      graphics_context_set_stroke_color( gCtx, s_colorMap[((worldPoints[i][j].z + Q_1) >> 14) & 0b111] ) ;   // ((z + 1) * 4) % 8
+      graphics_context_set_stroke_color( gCtx, s_colorMap[((function_worldPoints[i][j].z + Q_1) >> 14) & 0b111] ) ;   // ((z + 1) * 4) % 8
     break ;
 
     case COLOR_MODE_MONO:
@@ -354,7 +365,7 @@ get_stroke_ink
     break ;
     
     case COLOR_MODE_SIGNAL:
-      return (worldPoints[i][j].z > Q_0)  ?  INK100  :  INK33 ;
+      return (function_worldPoints[i][j].z > Q_0)  ?  INK100  :  INK33 ;
     break ;
 
     case COLOR_MODE_DIST:
@@ -423,7 +434,7 @@ world_initialize
 // UPDATE CAMERA & WORLD OBJECTS PROPERTIES
 
 void
-function_update
+function_update_worldPoints
 ( )
 {
   // Update z = f( x, y )
@@ -433,7 +444,7 @@ function_update
     for (int j = 0  ;  j < GRID_LINES  ;  ++j)
     {
       int32_t angle = ((dist_xy[i][j] >> 1) + anglePhase) & 0xFFFF ;   // (dist_xy[i][j] / 2 + anglePhase) % TRIG_MAX_RATIO
-      worldPoints[i][j].z = cos_lookup( angle ) ;
+      function_worldPoints[i][j].z = cos_lookup( angle ) ;
     }
 }
 
@@ -502,11 +513,66 @@ world_update
 {
   ++s_world_updateCount ;
   
-  function_update( ) ;
+  function_update_worldPoints( ) ;
   camera_update( ) ;
 
   // this will queue a defered call to the world_draw( ) method.
   layer_mark_dirty( s_world_layer ) ;
+}
+
+
+void
+function_draw_DOTS
+( GContext *gCtx )
+{
+  for (int i = 0  ;  i < GRID_LINES  ;  ++i)
+    for (int j = 0  ;  j < GRID_LINES  ;  ++j)
+    {
+#ifdef PBL_COLOR
+      set_stroke_color( gCtx, i, j ) ;
+#endif
+      graphics_draw_pixel( gCtx, function_screenPoints[i][j] ) ;
+    }
+}
+
+
+void
+function_draw_xLINES
+( GContext *gCtx )
+{
+  // x parallel lines.
+  for (int j = 0  ;  j < GRID_LINES  ;  ++j)
+    for (int i = 1  ;  i < GRID_LINES  ;  ++i)
+    {
+#ifdef PBL_COLOR
+      set_stroke_color( gCtx, i, j ) ;
+      graphics_draw_line( gCtx, function_screenPoints[i][j], function_screenPoints[i-1][j] ) ;
+#else
+      GPoint *p0 = &function_screenPoints[i][j] ;
+      GPoint *p1 = &function_screenPoints[i-1][j] ;
+      Draw2D_line_pattern( gCtx, p0->x, p0->y, p1->x, p1->y, get_stroke_ink( i, j ) ) ;
+#endif
+    }
+}
+
+
+void
+function_draw_yLINES
+( GContext *gCtx )
+{
+  // y parallel lines.
+  for (int i = 0  ;  i < GRID_LINES  ;  ++i)
+    for (int j = 1  ;  j < GRID_LINES  ;  ++j)
+    {
+#ifdef PBL_COLOR
+      set_stroke_color( gCtx, i, j ) ;
+      graphics_draw_line( gCtx, function_screenPoints[i][j], function_screenPoints[i][j-1] ) ;
+#else
+      GPoint *p0 = &function_screenPoints[i][j] ;
+      GPoint *p1 = &function_screenPoints[i][j-1] ;
+      Draw2D_line_pattern( gCtx, p0->x, p0->y, p1->x, p1->y, get_stroke_ink( i, j ) ) ;
+#endif
+   }
 }
 
 
@@ -539,59 +605,28 @@ world_draw
     {
       // Calculate camera film plane 2D coordinates of 3D world points.
       Q2 vCamera ;
-      CamQ3_view( &vCamera, &s_cam, &worldPoints[i][j] ) ;
+      CamQ3_view( &vCamera, &s_cam, &function_worldPoints[i][j] ) ;
   
       // Convert camera coordinates to screen/device coordinates.
       Q x = Q_mul( k, vCamera.x )  +  bX ;
       Q y = Q_mul( k, vCamera.y )  +  bY ;
-      screenPoints[i][j].x = Q_to_int(x) ;
-      screenPoints[i][j].y = Q_to_int(y) ;
+      function_screenPoints[i][j].x = Q_to_int(x) ;
+      function_screenPoints[i][j].y = Q_to_int(y) ;
     }
 
   // Draw the calculated screen points.
-  switch (s_render_mode)
+  switch (s_plotter_mode)
   {
-    case RENDER_MODE_DOTS:
-      for (int i = 0  ;  i < GRID_LINES  ;  ++i)
-        for (int j = 0  ;  j < GRID_LINES  ;  ++j)
-        {
-#ifdef PBL_COLOR
-          set_stroke_color( gCtx, i, j ) ;
-#endif
-          graphics_draw_pixel( gCtx, screenPoints[i][j] ) ;
-        }
-    break ;   //  case RENDER_MODE_DOTS:
+    case PLOTTER_MODE_DOTS:
+      function_draw_DOTS( gCtx ) ;
+    break ;
 
-    case RENDER_MODE_LINES:
-      // y parallel lines.
-      for (int i = 0  ;  i < GRID_LINES  ;  ++i)
-        for (int j = 1  ;  j < GRID_LINES  ;  ++j)
-        {
-#ifdef PBL_COLOR
-          set_stroke_color( gCtx, i, j ) ;
-          graphics_draw_line( gCtx, screenPoints[i][j], screenPoints[i][j-1] ) ;
-#else
-          GPoint *p0 = &screenPoints[i][j] ;
-          GPoint *p1 = &screenPoints[i][j-1] ;
-          Draw2D_line_pattern( gCtx, p0->x, p0->y, p1->x, p1->y, get_stroke_ink( i, j ) ) ;
-#endif
-        }
+    case PLOTTER_MODE_GRID:
+      function_draw_xLINES( gCtx ) ;
 
-      // x parallel lines.
-      for (int j = 0  ;  j < GRID_LINES  ;  ++j)
-        for (int i = 1  ;  i < GRID_LINES  ;  ++i)
-        {
-#ifdef PBL_COLOR
-          set_stroke_color( gCtx, i, j ) ;
-          graphics_draw_line( gCtx, screenPoints[i][j], screenPoints[i-1][j] ) ;
-#else
-          GPoint *p0 = &screenPoints[i][j] ;
-          GPoint *p1 = &screenPoints[i-1][j] ;
-          Draw2D_line_pattern( gCtx, p0->x, p0->y, p1->x, p1->y, get_stroke_ink( i, j ) ) ;
-#endif
-        }
-
-    break ;   //  case RENDER_MODE_LINES:
+    case PLOTTER_MODE_LINES:
+      function_draw_yLINES( gCtx ) ;
+    break ;
 
     default:
     break ;
@@ -670,7 +705,7 @@ click_config_provider
                                ) ;
 
   window_single_click_subscribe( BUTTON_ID_SELECT
-                               , (ClickHandler) renderMode_change_click_handler
+                               , (ClickHandler) plotterMode_change_click_handler
                                ) ;
 
 #ifdef GIF

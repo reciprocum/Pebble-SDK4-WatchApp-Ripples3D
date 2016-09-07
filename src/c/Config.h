@@ -2,8 +2,10 @@
    WatchApp: Ripples 3D
    File    : Config.h
    Author  : Afonso Santos, Portugal
+   Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
+           : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 16h35 September 06 2016  GMT
+   Last revision: 13h45 September 07 2016  GMT
 */
 
 #pragma once
@@ -13,7 +15,7 @@
 
 // Uncommenting the next line will enable GIF mode.
 //#define  GIF
-//#define  GIF_STOP_COUNT     1
+//#define  GIF_STOP_COUNT     64
 
 // Commenting the next line will enable fast distro settings
 //#define EMU
