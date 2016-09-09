@@ -37,7 +37,8 @@ static Q3     function_worldPoints [GRID_LINES][GRID_LINES] ;
 static GPoint function_screenPoints[GRID_LINES][GRID_LINES] ;
 static Q      oscillator_distance  [GRID_LINES][GRID_LINES] ;
 static Q2     oscillator_position ;
-static Q2     oscillator_speed ;
+static Q2     oscillator_speed ;          // For OSCILLATOR_MODE_BOUNCING
+static Q2     oscillator_acceleration ;   // For OSCILLATOR_MODE_BOUNCING
 
 const Q  grid_scale     = Q_from_float(GRID_SCALE) ;
 const Q  grid_halfScale = Q_from_float(GRID_SCALE) >> 1 ;   //  scale / 2
@@ -140,14 +141,15 @@ cam_config
 typedef enum { OSCILLATOR_MODE_UNDEFINED
              , OSCILLATOR_MODE_ANCHORED
              , OSCILLATOR_MODE_FLOATING
-//           , OSCILLATOR_MODE_BOUNCING
+             , OSCILLATOR_MODE_BOUNCING
              }
 OscilatorMode ;
 
 static OscilatorMode    s_oscillatorMode = OSCILLATOR_MODE_UNDEFINED ;
 
 void oscillator_distance_update( const Q2 *pRefPtr ) ;
-Q2*  grid_position_setFromAccel( Q2 *positionPtr ) ;
+Q2*  position_setFromSensors( Q2 *positionPtr ) ;
+Q2*  acceleration_setFromSensors( Q2 *accelerationPtr ) ;
 
 
 void
@@ -161,17 +163,14 @@ oscillatorMode_set
   {
     case OSCILLATOR_MODE_FLOATING:
       cam_config( Q3_set( &s_cam_viewPoint, Q_from_float( +0.1f ), Q_from_float( -1.0f ), Q_from_float( +0.7f ) ), s_cam_rotZangle = 0 ) ;
-      grid_position_setFromAccel( &oscillator_position ) ;
+      position_setFromSensors( &oscillator_position ) ;
     break ;
 
-/*
     case OSCILLATOR_MODE_BOUNCING:
-      Q3_set( &s_cam_viewPoint, Q_from_float( +0.1f ), Q_from_float( -1.0f ), Q_from_float( +0.7f ) ) ;
-      cam_config( &s_cam_viewPoint, s_cam_rotZangle = 0 ) ;
-      Q2_set( &oscillator_speed, 2048, 1024 ) ;
-      Q2_assign( &oscillator_position, &Q2_origin ) ;   //  oscillator_position := Q2_origin
+      cam_config( Q3_set( &s_cam_viewPoint, Q_from_float( +0.1f ), Q_from_float( -1.0f ), Q_from_float( +0.7f ) ), s_cam_rotZangle = 0 ) ;
+      Q2_assign( &oscillator_position, &Q2_origin ) ;   //  Initial position is center of grid.
+      Q2_assign( &oscillator_speed   , &Q2_origin ) ;   //  No initial speed.
     break ;
-*/
 
     case OSCILLATOR_MODE_ANCHORED:
     default:
@@ -196,18 +195,12 @@ oscillatorMode_change
     break ;
 
    case OSCILLATOR_MODE_FLOATING:
-     oscillatorMode_set( OSCILLATOR_MODE_ANCHORED ) ;
-   break ;
-
-/*
-   case OSCILLATOR_MODE_FLOATING:
      oscillatorMode_set( OSCILLATOR_MODE_BOUNCING ) ;
    break ;
 
    case OSCILLATOR_MODE_BOUNCING:
      oscillatorMode_set( OSCILLATOR_MODE_ANCHORED ) ;
    break ;
-*/
 
     default:
       oscillatorMode_set( OSCILLATOR_MODE_DEFAULT ) ;
@@ -546,7 +539,7 @@ function_update_worldPoints
 
 
 Q2 *
-grid_position_setFromAccel
+position_setFromSensors
 ( Q2 *positionPtr )
 {
   AccelData ad ;
@@ -560,6 +553,24 @@ grid_position_setFromAccel
   }
   
   return positionPtr ;
+}
+
+
+Q2 *
+acceleration_setFromSensors
+( Q2 *accelerationPtr )
+{
+  AccelData ad ;
+
+  if (accel_service_peek( &ad ) < 0)         // Accel service not available.
+    Q2_assign( accelerationPtr, &Q2_origin ) ;
+  else
+  {
+    accelerationPtr->x = ad.x >> 2 ;
+    accelerationPtr->y = ad.y >> 2 ;
+  }
+
+  return accelerationPtr ;
 }
 
 
@@ -634,15 +645,23 @@ oscillator_update
     break ;
 
     case OSCILLATOR_MODE_FLOATING:
-      oscillator_distance_update( grid_position_setFromAccel( &oscillator_position ) ) ;
+      oscillator_distance_update( position_setFromSensors( &oscillator_position ) ) ;
     break ;
 
-/*
     case OSCILLATOR_MODE_BOUNCING:
-      //  1) affect oscillator position given current oscillator_speed
+      //  1) set oscillator acceleration from sensor readings
+      acceleration_setFromSensors( &oscillator_acceleration ) ;
+
+      //  2) update oscillator speed with oscillator acceleration
+      // TODO: prevent acceleration to act when position is "on the ropes".
+      Q2_add( &oscillator_speed, &oscillator_speed, &oscillator_acceleration ) ;   //  oscillator_speed += oscillator_acceleration
+
+      //  3) affect oscillator position given current oscillator speed
       Q2_add( &oscillator_position, &oscillator_position, &oscillator_speed ) ;   //  oscillator_position += oscillator_speed
 
-      //  2) detect/correct boundary colisions/transgretions, invert speed direction on colision for bounce effect.
+      //  4) detect boundary colisions
+      //     clip position to stay inside grid boundaries.
+      //     invert speed direction on colision for bounce effect
       if (oscillator_position.x < -grid_halfScale)
       {
         oscillator_position.x = -grid_halfScale ;
@@ -667,21 +686,10 @@ oscillator_update
 
       oscillator_distance_update( &oscillator_position ) ;
 
-      // TODO
-      // 3) affect current oscillator_speed given accelerometer readings
-
-      // 4) introduce some drag on current oscillator_speed
-      if (oscillator_speed.x > Q_0 )
-        --oscillator_speed.x ;
-      else if (oscillator_speed.x < Q_0 )
-        ++oscillator_speed.x ;
-
-      if (oscillator_speed.y > Q_0 )
-        --oscillator_speed.y ;
-      else if (oscillator_speed.y < Q_0 )
-        ++oscillator_speed.y ;
+      // 6) introduce some drag to dampen oscillator speed
+      Q2 drag ;
+      Q2_sub( &oscillator_speed, &oscillator_speed, Q2_sca( &drag, Q_1 >> 6, &oscillator_speed ) ) ;   //  Drag is 1/64 (~1.5%) of speed. Should kill speed in about 100 frames (~4s)
     break ;
-*/
 
     default:
     break ;
@@ -842,12 +850,20 @@ world_update_timer_handler
 
 
 #ifndef GIF
+static int s_world_updateCount_onLastTap = 0 ;
+
 void
 accel_tap_service_handler
 ( AccelAxisType  axis        // Process tap on ACCEL_AXIS_X, ACCEL_AXIS_Y or ACCEL_AXIS_Z
 , int32_t        direction   // Direction is 1 or -1
 )
 {
+  // Ignore too closely spaced (in time) tap events to avoid over twisting users.
+  if ((s_world_updateCount - s_world_updateCount_onLastTap) < 25)
+    return ;
+  
+  s_world_updateCount_onLastTap = s_world_updateCount ;
+
   switch (axis)
   {
     case ACCEL_AXIS_Y:    // Twist: next oscillatorMode.
@@ -866,6 +882,8 @@ accel_tap_service_handler
     default:
     break ;
   }
+
+  vibes_short_pulse( ) ;
 }
 #endif
 

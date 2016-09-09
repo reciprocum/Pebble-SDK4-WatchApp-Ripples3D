@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 15h35 September 09 2016  GMT
+   Last revision: 18h55 September 09 2016  GMT
 */
 
 #include "Config.h"
@@ -13,7 +13,7 @@
 // World related
 
 #ifdef PBL_PLATFORM_APLITE
-  #define GRID_LINES        27
+  #define GRID_LINES        25
 #else
   #define GRID_LINES        31
 #endif
