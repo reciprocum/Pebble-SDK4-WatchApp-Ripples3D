@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 20h25 September 10 2016  GMT
+   Last revision: 13h45 September 11 2016  GMT
 */
 
 #include "Config.h"
@@ -25,9 +25,9 @@
 
 /* -----------   PHYSICS PARAMETERS   ----------- */
 
-//  With a value of 6 drag is 1/2^6 (1/64 ~1.5%) of speed. Should kill speed in about 100 frames (~4s)
-//  Decrease this value for the speed to dissipate faster
+//  With a lubrication value of 6 drag is 1/2^6 (1/64 ~1.5%) of speed. Should kill speed in about 100 frames (~4s)
 //  Increase this value for the speed to last longer
+//  Decrease this value for the speed to dissipate faster
 #define OSCILLATOR_LUBRICATION_LEVEL    6
 
 //  Controls how fast a wrist tilt will influence the oscilator horizontal moving speed.
@@ -36,6 +36,7 @@
 #define OSCILLATOR_INERTIA_LEVEL        2
 
 
+/* -----------   Default modes   ----------- */
 
 //#define  OSCILLATOR_MODE_DEFAULT     OSCILLATOR_MODE_FLOATING
 //#define  OSCILLATOR_MODE_DEFAULT     OSCILLATOR_MODE_BOUNCING

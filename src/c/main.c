@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 20h25 September 10 2016  GMT
+   Last revision: 13h45 September 11 2016  GMT
 */
 
 #include <pebble.h>
@@ -696,39 +696,30 @@ oscillator_update
       //     clip position to stay inside grid boundaries.
       //     invert speed direction on colision for bounce effect
 
-      bool  didBounce = false ;
-
       if (oscillator_position.x < -grid_halfScale)
       {
         oscillator_position.x = -grid_halfScale ;
         oscillator_speed.x    = -oscillator_speed.x ;
-        didBounce = true ;
       }
       else if (oscillator_position.x > grid_halfScale)
       {
         oscillator_position.x = grid_halfScale ;
         oscillator_speed.x    = -oscillator_speed.x ;
-        didBounce = true ;
       }
 
       if (oscillator_position.y < -grid_halfScale)
       {
         oscillator_position.y = -grid_halfScale ;
         oscillator_speed.y    = -oscillator_speed.y ;
-        didBounce = true ;
       }
       else if (oscillator_position.y > grid_halfScale)
       {
         oscillator_position.y = grid_halfScale ;
         oscillator_speed.y    = -oscillator_speed.y ;
-        didBounce = true ;
       }
 
-      if (didBounce)
-        plotterMode_change( ) ;
-  
 #ifdef GIF
-  if (s_world_updateCount >= GIF_STOP_COUNT)
+    if (s_world_updateCount >= GIF_STOP_COUNT)
 #endif
       oscillator_distance_update( &oscillator_position ) ;
 
