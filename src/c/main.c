@@ -599,8 +599,8 @@ acceleration_setFromSensors
     Q2_assign( accelerationPtr, &Q2_origin ) ;
   else
   {
-    accelerationPtr->x = ad.x >> 2 ;
-    accelerationPtr->y = ad.y >> 2 ;
+    accelerationPtr->x = ad.x >> OSCILLATOR_INERTIA_LEVEL ;
+    accelerationPtr->y = ad.y >> OSCILLATOR_INERTIA_LEVEL ;
   }
 
   return accelerationPtr ;
@@ -735,7 +735,7 @@ oscillator_update
       // 6) introduce some drag to dampen oscillator speed
       #ifndef GIF
         Q2 drag ;
-        Q2_sub( &oscillator_speed, &oscillator_speed, Q2_sca( &drag, Q_1 >> 6, &oscillator_speed ) ) ;   //  Drag is 1/64 (~1.5%) of speed. Should kill speed in about 100 frames (~4s)
+        Q2_sub( &oscillator_speed, &oscillator_speed, Q2_sca( &drag, Q_1 >> OSCILLATOR_DRAG_LEVEL, &oscillator_speed ) ) ;
       #endif
     break ;
 
