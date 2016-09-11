@@ -735,7 +735,7 @@ oscillator_update
       // 6) introduce some drag to dampen oscillator speed
       #ifndef GIF
         Q2 drag ;
-        Q2_sub( &oscillator_speed, &oscillator_speed, Q2_sca( &drag, Q_1 >> OSCILLATOR_DRAG_LEVEL, &oscillator_speed ) ) ;
+        Q2_sub( &oscillator_speed, &oscillator_speed, Q2_sca( &drag, Q_1 >> OSCILLATOR_LUBRICATION_LEVEL, &oscillator_speed ) ) ;
       #endif
     break ;
 

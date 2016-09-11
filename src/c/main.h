@@ -26,14 +26,14 @@
 /* -----------   PHYSICS PARAMETERS   ----------- */
 
 //  With a value of 6 drag is 1/2^6 (1/64 ~1.5%) of speed. Should kill speed in about 100 frames (~4s)
-//  Increase this value for the speed to dissipate faster
-//  Decrease this value for the speed to last longer
-#define OSCILLATOR_DRAG_LEVEL       6
+//  Decrease this value for the speed to dissipate faster
+//  Increase this value for the speed to last longer
+#define OSCILLATOR_LUBRICATION_LEVEL    6
 
 //  Controls how fast a wrist tilt will influence the oscilator horizontal moving speed.
 //  Increase this value for a "heavier" feeling
 //  Decrease this value for a "lighter" feeling
-#define OSCILLATOR_INERTIA_LEVEL    2
+#define OSCILLATOR_INERTIA_LEVEL        2
 
 
 
