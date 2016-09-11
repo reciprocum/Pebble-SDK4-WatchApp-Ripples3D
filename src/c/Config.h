@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 15h05 September 09 2016  GMT
+   Last revision: 20h25 September 10 2016  GMT
 */
 
 #pragma once
@@ -15,7 +15,7 @@
 
 // Uncommenting the next line will enable GIF mode.
 //#define  GIF
-//#define  GIF_STOP_COUNT     8096
+//#define  GIF_STOP_COUNT     251
 
 // Commenting the next line will enable fast distro settings
 //#define EMU

@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 15h35 September 09 2016  GMT
+   Last revision: 20h25 September 10 2016  GMT
 */
 
 #include <pebble.h>
@@ -45,6 +45,64 @@ const Q  grid_halfScale = Q_from_float(GRID_SCALE) >> 1 ;   //  scale / 2
 
 static int        s_world_updateCount       = 0 ;
 static AppTimer  *s_world_updateTimer_ptr   = NULL ;
+
+
+/***  ---------------  COLOR MODE  ---------------  ***/
+
+typedef enum { COLOR_MODE_UNDEFINED
+             , COLOR_MODE_MONO
+             , COLOR_MODE_SIGNAL
+             , COLOR_MODE_DIST
+             }
+ColorMode ;
+
+
+static ColorMode  s_colorMode = COLOR_MODE_UNDEFINED ;
+
+
+void
+colorMode_set
+( ColorMode pColorMode )
+{
+  if (s_colorMode == pColorMode)
+    return ;
+
+  s_colorMode = pColorMode ;
+}
+
+
+void
+colorMode_change
+( )
+{
+  // Cycle trough the color modes.
+  switch (s_colorMode)
+  {
+    case COLOR_MODE_MONO:
+      colorMode_set( COLOR_MODE_SIGNAL ) ;
+    break ;
+
+    case COLOR_MODE_SIGNAL:
+      colorMode_set( COLOR_MODE_DIST ) ;
+    break ;
+
+    case COLOR_MODE_DIST:
+      colorMode_set( COLOR_MODE_MONO ) ;
+    break ;
+
+    default:
+      colorMode_set( COLOR_MODE_DEFAULT ) ;
+    break ;
+  } ;
+}
+
+
+void
+colorMode_change_click_handler
+( ClickRecognizerRef recognizer
+, void              *context
+)
+{ colorMode_change( ) ; }
 
 
 /***  ---------------  PLOTTER MODE  ---------------  ***/
@@ -156,7 +214,7 @@ void
 oscillatorMode_set
 ( OscilatorMode pOscilatorMode )
 {
-  if (pOscilatorMode == s_oscillatorMode)
+  if (s_oscillatorMode == pOscilatorMode)
     return ;
 
   switch (s_oscillatorMode = pOscilatorMode)
@@ -169,7 +227,12 @@ oscillatorMode_set
     case OSCILLATOR_MODE_BOUNCING:
       cam_config( Q3_set( &s_cam_viewPoint, Q_from_float( +0.1f ), Q_from_float( -1.0f ), Q_from_float( +0.7f ) ), s_cam_rotZangle = 0 ) ;
       Q2_assign( &oscillator_position, &Q2_origin ) ;   //  Initial position is center of grid.
-      Q2_assign( &oscillator_speed   , &Q2_origin ) ;   //  No initial speed.
+
+      #ifdef GIF
+        Q2_set( &oscillator_speed, 3072, -1536 ) ;
+      #else
+        Q2_assign( &oscillator_speed, &Q2_origin ) ;   //  No initial speed.
+      #endif
     break ;
 
     case OSCILLATOR_MODE_ANCHORED:
@@ -194,19 +257,27 @@ oscillatorMode_change
       oscillatorMode_set( OSCILLATOR_MODE_FLOATING ) ;
     break ;
 
-   case OSCILLATOR_MODE_FLOATING:
-     oscillatorMode_set( OSCILLATOR_MODE_BOUNCING ) ;
-   break ;
+    case OSCILLATOR_MODE_FLOATING:
+      oscillatorMode_set( OSCILLATOR_MODE_BOUNCING ) ;
+    break ;
 
-   case OSCILLATOR_MODE_BOUNCING:
-     oscillatorMode_set( OSCILLATOR_MODE_ANCHORED ) ;
-   break ;
+    case OSCILLATOR_MODE_BOUNCING:
+      oscillatorMode_set( OSCILLATOR_MODE_ANCHORED ) ;
+    break ;
 
     default:
       oscillatorMode_set( OSCILLATOR_MODE_DEFAULT ) ;
     break ;
   } ;
 }
+
+
+void
+oscillatorMode_change_click_handler
+( ClickRecognizerRef recognizer
+, void              *context
+)
+{ oscillatorMode_change( ) ; }
 
 
 #ifdef GIF
@@ -318,51 +389,7 @@ function_grid_initialize
 }
 
 
-/***  ---------------  COLOR MODE  ---------------  ***/
-
-typedef enum { COLOR_MODE_MONO
-             , COLOR_MODE_SIGNAL
-             , COLOR_MODE_DIST
-             }
-ColorMode ;
-
-
-static ColorMode  s_colorMode = COLOR_MODE_DEFAULT ;
-
-
-void
-colorMode_change
-( )
-{
-  // Cycle trough the color modes.
-  switch (s_colorMode)
-  {
-    case COLOR_MODE_MONO:
-     s_colorMode = COLOR_MODE_SIGNAL ;
-     break ;
-
-    case COLOR_MODE_SIGNAL:
-     s_colorMode = COLOR_MODE_DIST ;
-     break ;
-
-   case COLOR_MODE_DIST:
-     s_colorMode = COLOR_MODE_MONO ;
-     break ;
-
-   default:
-     s_colorMode = PLOTTER_MODE_DEFAULT ;
-     break ;
-  } ;
-}
-
-
-void
-colorMode_change_click_handler
-( ClickRecognizerRef recognizer
-, void              *context
-)
-{ colorMode_change( ) ; }
-
+/***  ---------------  Color related  ---------------  ***/
 
 static GColor     s_stroke_color ;
 static GColor     s_background_color ;
@@ -507,6 +534,9 @@ world_initialize
 ( )
 {
   function_grid_initialize( ) ;
+  color_initialize( ) ;
+
+  colorMode_set( COLOR_MODE_DEFAULT ) ;
   plotterMode_set( PLOTTER_MODE_DEFAULT ) ;
   oscillatorMode_set( OSCILLATOR_MODE_DEFAULT ) ;
 
@@ -516,8 +546,6 @@ world_initialize
 
   // Initialize cam rotation vars.
   s_cam_rotZangleStep = TRIG_MAX_ANGLE >> 9 ;   //  2 * PI / 512
-
-  color_initialize( ) ;
 }
 
 
@@ -527,13 +555,18 @@ void
 function_update_worldPoints
 ( )
 {
+#ifdef GIF
+  if (s_world_updateCount < GIF_STOP_COUNT)
+    return ;   //  Fast FWD until stop frame.
+#endif
+
   int32_t anglePhase = TRIG_MAX_ANGLE - ((s_world_updateCount << 8) & 0xFFFF) ;   //  angle = 2*PI - (256 * s_world_updateCount) % TRIG_MAX_RATIO
 
   for (int i = 0  ;  i < GRID_LINES  ;  ++i)
     for (int j = 0  ;  j < GRID_LINES  ;  ++j)
     {
       int32_t angle = ((oscillator_distance[i][j] >> 1) + anglePhase) & 0xFFFF ;   //  (oscillator_distance[i][j] / 2 + anglePhase) % TRIG_MAX_RATIO
-      function_worldPoints[i][j].z = cos_lookup( angle ) ;                        //  z = f( x, y )
+      function_worldPoints[i][j].z = cos_lookup( angle ) ;                         //  z = f( x, y )
     }
 }
 
@@ -662,33 +695,48 @@ oscillator_update
       //  4) detect boundary colisions
       //     clip position to stay inside grid boundaries.
       //     invert speed direction on colision for bounce effect
+
+      bool  didBounce = false ;
+
       if (oscillator_position.x < -grid_halfScale)
       {
         oscillator_position.x = -grid_halfScale ;
         oscillator_speed.x    = -oscillator_speed.x ;
+        didBounce = true ;
       }
       else if (oscillator_position.x > grid_halfScale)
       {
         oscillator_position.x = grid_halfScale ;
         oscillator_speed.x    = -oscillator_speed.x ;
+        didBounce = true ;
       }
 
       if (oscillator_position.y < -grid_halfScale)
       {
         oscillator_position.y = -grid_halfScale ;
         oscillator_speed.y    = -oscillator_speed.y ;
+        didBounce = true ;
       }
       else if (oscillator_position.y > grid_halfScale)
       {
         oscillator_position.y = grid_halfScale ;
         oscillator_speed.y    = -oscillator_speed.y ;
+        didBounce = true ;
       }
 
+      if (didBounce)
+        plotterMode_change( ) ;
+  
+#ifdef GIF
+  if (s_world_updateCount >= GIF_STOP_COUNT)
+#endif
       oscillator_distance_update( &oscillator_position ) ;
 
       // 6) introduce some drag to dampen oscillator speed
-      Q2 drag ;
-      Q2_sub( &oscillator_speed, &oscillator_speed, Q2_sca( &drag, Q_1 >> 6, &oscillator_speed ) ) ;   //  Drag is 1/64 (~1.5%) of speed. Should kill speed in about 100 frames (~4s)
+      #ifndef GIF
+        Q2 drag ;
+        Q2_sub( &oscillator_speed, &oscillator_speed, Q2_sca( &drag, Q_1 >> 6, &oscillator_speed ) ) ;   //  Drag is 1/64 (~1.5%) of speed. Should kill speed in about 100 frames (~4s)
+      #endif
     break ;
 
     default:
@@ -775,6 +823,11 @@ world_draw
 {
   LOGD( "world_draw:: s_world_updateCount = %d", s_world_updateCount ) ;
 
+#ifdef GIF
+  if (s_world_updateCount < GIF_STOP_COUNT)
+    return ;   //  Fast FWD until stop frame.
+#endif
+
 #ifdef PBL_COLOR
   graphics_context_set_antialiased( gCtx, s_antialiasing ) ;
 #else
@@ -849,45 +902,6 @@ world_update_timer_handler
 }
 
 
-#ifndef GIF
-static int s_world_updateCount_onLastTap = 0 ;
-
-void
-accel_tap_service_handler
-( AccelAxisType  axis        // Process tap on ACCEL_AXIS_X, ACCEL_AXIS_Y or ACCEL_AXIS_Z
-, int32_t        direction   // Direction is 1 or -1
-)
-{
-  // Ignore too closely spaced (in time) tap events to avoid over twisting users.
-  if ((s_world_updateCount - s_world_updateCount_onLastTap) < 25)
-    return ;
-  
-  s_world_updateCount_onLastTap = s_world_updateCount ;
-
-  switch (axis)
-  {
-    case ACCEL_AXIS_Y:    // Twist: next oscillatorMode.
-      oscillatorMode_change( ) ;
-    break ;
-
-    case ACCEL_AXIS_X:    // Punch: next plotterMode.
-      plotterMode_change( ) ;
-    break ;
-
-    case ACCEL_AXIS_Z:    // Yaiks: reset DEFAULTs
-      oscillatorMode_set( OSCILLATOR_MODE_DEFAULT ) ;
-      plotterMode_set( PLOTTER_MODE_DEFAULT ) ;
-    break ;
-
-    default:
-    break ;
-  }
-
-  vibes_short_pulse( ) ;
-}
-#endif
-
-
 void
 world_start
 ( )
@@ -895,9 +909,6 @@ world_start
 #ifndef GIF
   // Gravity aware.
  	accel_data_service_subscribe( 0, accel_data_service_handler ) ;
-
-  // Tap aware.
-  accel_tap_service_subscribe( accel_tap_service_handler ) ;
 #endif
 
   // Start animation.
@@ -919,9 +930,6 @@ world_stop
 #ifndef GIF
   // Gravity unaware.
   accel_data_service_unsubscribe( ) ;
-
-  // Tap unaware.
-  accel_tap_service_unsubscribe( ) ;
 #endif
 }
 
@@ -946,20 +954,28 @@ click_config_provider
                                , (ClickHandler) plotterMode_change_click_handler
                                ) ;
 
-#ifdef GIF
+#ifndef GIF
+  window_single_click_subscribe( BUTTON_ID_DOWN
+                               , (ClickHandler) oscillatorMode_change_click_handler
+                               ) ;
+#else
   window_single_click_subscribe( BUTTON_ID_DOWN
                                , (ClickHandler) gifStepper_advance_click_handler
                                ) ;
+#endif
+
+#ifdef PBL_COLOR
+  window_long_click_subscribe( BUTTON_ID_DOWN
+                             , 0
+                             , (ClickHandler) antialiasing_change_click_handler
+                             , NULL
+                             ) ;
 #else
-  #ifdef PBL_COLOR
-  window_single_click_subscribe( BUTTON_ID_DOWN
-                               , (ClickHandler) antialiasing_change_click_handler
-                               ) ;
-  #else
-  window_single_click_subscribe( BUTTON_ID_DOWN
-                               , (ClickHandler) invert_change_click_handler
-                               ) ;
-  #endif
+  window_long_click_subscribe( BUTTON_ID_DOWN
+                             , 0
+                             , (ClickHandler) invert_change_click_handler
+                             , NULL
+                             ) ;
 #endif
 }
 
