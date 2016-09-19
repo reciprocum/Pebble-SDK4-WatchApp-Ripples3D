@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 11h45 September 19 2016  GMT
+   Last revision: 19h35 September 19 2016  GMT
 */
 
 #include <pebble.h>
@@ -31,25 +31,23 @@ static Q world_xMin, world_xMax, world_yMin, world_yMax, world_zMin, world_zMax 
 const Q  grid_scale     = Q_from_float(GRID_SCALE) ;
 const Q  grid_halfScale = Q_from_float(GRID_SCALE) >> 1 ;   //  scale / 2
 
-static Q       grid_major_x         [GRID_LINES] ;
-static Q       grid_major_y         [GRID_LINES] ;
-static Q       grid_major_z         [GRID_LINES][GRID_LINES] ;
-static Q       grid_major_dx2       [GRID_LINES] ;
-static Q       grid_major_dy2       [GRID_LINES] ;
-static Q       grid_major_dist2osc  [GRID_LINES][GRID_LINES] ;
-static bool    grid_major_visibility[GRID_LINES][GRID_LINES] ;
-static GPoint  grid_major_screen    [GRID_LINES][GRID_LINES] ;
+#define Z_SHIFT      9
+#define DIST_SHIFT   4
+#define COORD_SHIFT  4
 
-#ifndef PBL_PLATFORM_APLITE
-static Q       grid_minor_x         [GRID_LINES-1] ;
-static Q       grid_minor_y         [GRID_LINES-1] ;
-static Q       grid_minor_z         [GRID_LINES-1][GRID_LINES-1] ;
-static Q       grid_minor_dx2       [GRID_LINES-1] ;
-static Q       grid_minor_dy2       [GRID_LINES-1] ;
-static Q       grid_minor_dist2osc  [GRID_LINES-1][GRID_LINES-1] ;
-static bool    grid_minor_visibility[GRID_LINES-1][GRID_LINES-1] ;
-static GPoint  grid_minor_screen    [GRID_LINES-1][GRID_LINES-1] ;
-#endif
+static int16_t  grid_major_x         [GRID_LINES] ;               // Q3.12  Coords [-7.999,+7.999]
+static int16_t  grid_major_y         [GRID_LINES] ;               // Q3.12  Coords [-7.999,+7.999]
+static int8_t   grid_major_z         [GRID_LINES][GRID_LINES] ;   // Q0.7   f(x,y) [-0.99, +0.99]
+static uint16_t grid_major_dist2osc  [GRID_LINES][GRID_LINES] ;   // Q4.12  Need integer part up to 13 because of max diagonal distance for bouncing oscillator.
+static bool     grid_major_visibility[GRID_LINES][GRID_LINES] ;
+static GPoint   grid_major_screen    [GRID_LINES][GRID_LINES] ;
+
+static int16_t  grid_minor_x         [GRID_LINES-1] ;                 // Q3.12  Coords [-7.999,+7.999]
+static int16_t  grid_minor_y         [GRID_LINES-1] ;                 // Q3.12  Coords [-7.999,+7.999]
+static int8_t   grid_minor_z         [GRID_LINES-1][GRID_LINES-1] ;   // Q0.7   f(x,y) [-0.99, +0.99]
+static uint16_t grid_minor_dist2osc  [GRID_LINES-1][GRID_LINES-1] ;   // Q4.12  Need integer part up to sqrt(2) * GRID_SCALE because of max diagonal distance for bouncing oscillator.
+static bool     grid_minor_visibility[GRID_LINES-1][GRID_LINES-1] ;
+static GPoint   grid_minor_screen    [GRID_LINES-1][GRID_LINES-1] ;
 
 static int32_t oscillator_anglePhase ;
 static Q2      oscillator_position ;
@@ -73,11 +71,9 @@ cam_config
 , const int32_t  rotXangle
 ) ;
 
-#ifndef PBL_PLATFORM_APLITE
-  void grid_minor_dist2osc_update( ) ;
-  void grid_minor_z_update( ) ;
-  void grid_minor_isVisible_update( ) ;
-#endif
+void grid_minor_dist2osc_update( ) ;
+void grid_minor_z_update( ) ;
+void grid_minor_isVisible_update( ) ;
 
 
 /***  ---------------  COLORIZATION  ---------------  ***/
@@ -140,13 +136,12 @@ pattern_set
 
   switch (s_pattern = pattern)
   {
-#ifndef PBL_PLATFORM_APLITE
-    case PATTERN_DUST:
+    case PATTERN_DOTS:
+    case PATTERN_STRIPES:
       grid_minor_dist2osc_update( ) ;
       grid_minor_z_update( ) ;
       grid_minor_isVisible_update( ) ;
     break ;
-#endif
 
     default:
       break ;
@@ -160,20 +155,7 @@ pattern_change
 {
   switch (s_pattern)
   {
-#ifdef PBL_PLATFORM_APLITE
       case PATTERN_DOTS:
-        pattern_set( PATTERN_LINES ) ;
-      break ;
-
-      case PATTERN_LINES:
-        pattern_set( PATTERN_GRID ) ;
-      break ;
-#else
-      case PATTERN_DOTS:
-        pattern_set( PATTERN_DUST ) ;
-      break ;
-
-      case PATTERN_DUST:
         pattern_set( PATTERN_LINES ) ;
       break ;
 
@@ -184,7 +166,6 @@ pattern_change
       case PATTERN_STRIPES:
         pattern_set( PATTERN_GRID ) ;
       break ;
-#endif
 
       case PATTERN_GRID:
         pattern_set( PATTERN_DOTS ) ;
@@ -229,12 +210,10 @@ transparency_set
         for (int j = 0  ;  j < GRID_LINES  ;  ++j)
           grid_major_visibility[i][j] = true ;
 
-#ifndef PBL_PLATFORM_APLITE
       // Set all minor to true.
       for (int i = 0  ;  i < GRID_LINES-1  ;  ++i)
         for (int j = 0  ;  j < GRID_LINES-1  ;  ++j)
           grid_minor_visibility[i][j] = true ;
-#endif
     break ;
 
     case TRANSPARENCY_UNDEFINED:
@@ -652,48 +631,46 @@ void
 grid_major_dist2osc_update
 ( )
 {
+  Q dy2[GRID_LINES-1] ;
+
   for (int l = 0  ;  l < GRID_LINES  ;  l++)
   {
-    const Q dx = oscillator_position.x - grid_major_x[l] ;
-    grid_major_dx2[l] = Q_mul( dx, dx ) ;
-
-    const Q dy = oscillator_position.y - grid_major_y[l] ;
-    grid_major_dy2[l] = Q_mul( dy, dy ) ;
+    const Q dy = oscillator_position.y - (grid_major_y[l] << COORD_SHIFT) ;
+    dy2[l] = Q_mul( dy, dy ) ;
   }
 
   for (int i = 0  ;  i < GRID_LINES  ;  i++)
   {
-    const Q dx2_i = grid_major_dx2[i] ;
+    const Q dx    = oscillator_position.x - (grid_major_x[i] << COORD_SHIFT) ;
+    const Q dx2_i = Q_mul( dx, dx ) ;
 
     for (int j = 0  ;  j < GRID_LINES  ;  j++)
-      grid_major_dist2osc[i][j] = Q_sqrt( dx2_i + grid_major_dy2[j] ) ;
+      grid_major_dist2osc[i][j] = Q_sqrt( dx2_i + dy2[j] ) >> DIST_SHIFT ;
   }
 }
 
 
-#ifndef PBL_PLATFORM_APLITE
 void
 grid_minor_dist2osc_update
 ( )
 {
+  Q dy2[GRID_LINES-1] ;
+
   for (int l = 0  ;  l < GRID_LINES-1  ;  l++)
   {
-    const Q dx = oscillator_position.x - grid_minor_x[l] ;
-    grid_minor_dx2[l] = Q_mul( dx, dx ) ;
-
-    const Q dy = oscillator_position.y - grid_minor_y[l] ;
-    grid_minor_dy2[l] = Q_mul( dy, dy ) ;
+    const Q dy = oscillator_position.y - (grid_minor_y[l] << COORD_SHIFT) ;
+    dy2[l] = Q_mul( dy, dy ) ;
   }
 
   for (int i = 0  ;  i < GRID_LINES-1  ;  i++)
   {
-    const Q dx2_i = grid_minor_dx2[i] ;
+    const Q dx    = oscillator_position.x - (grid_minor_x[i] << COORD_SHIFT) ;
+    const Q dx2_i = Q_mul( dx, dx ) ;
 
     for (int j = 0  ;  j < GRID_LINES-1  ;  j++)
-      grid_minor_dist2osc[i][j] = Q_sqrt( dx2_i + grid_minor_dy2[j] ) ;
+      grid_minor_dist2osc[i][j] = Q_sqrt( dx2_i + dy2[j] ) >> DIST_SHIFT ;
   }
 }
-#endif
 
 
 void
@@ -702,13 +679,10 @@ grid_dist2osc_update
 {
   switch (s_pattern)
   {
-#ifndef PBL_PLATFORM_APLITE
-    case PATTERN_DUST:
+    case PATTERN_DOTS:
     case PATTERN_STRIPES:
       grid_minor_dist2osc_update( ) ;
-#endif
 
-    case PATTERN_DOTS:
     case PATTERN_LINES:
     case PATTERN_GRID:
       grid_major_dist2osc_update( ) ;
@@ -734,21 +708,17 @@ grid_initialize
   int l ;
   Q   lCoord ;
 
-  /* Dots */
   for ( l = 0          , lCoord = -grid_halfScale
       ; l < GRID_LINES
       ; l++            , lCoord += distanceBetweenLines
       )
-    grid_major_x[l] = grid_major_y[l] = lCoord ;
+    grid_major_x[l] = grid_major_y[l] = lCoord >> COORD_SHIFT ;
 
-#ifndef PBL_PLATFORM_APLITE
-  /* Dust */
   for ( l = 0          , lCoord = -grid_halfScale + (distanceBetweenLines >> 1)
       ; l < GRID_LINES-1
       ; l++            , lCoord += distanceBetweenLines
       )
-    grid_minor_x[l] = grid_minor_y[l] = lCoord ;
-#endif
+    grid_minor_x[l] = grid_minor_y[l] = lCoord >> COORD_SHIFT ;
 }
 
 
@@ -917,20 +887,18 @@ grid_major_z_update
 {
   for (int i = 0  ;  i < GRID_LINES  ;  ++i)
     for (int j = 0  ;  j < GRID_LINES  ;  ++j)
-      grid_major_z[i][j] = f_distance( grid_major_dist2osc[i][j] ) ;
+      grid_major_z[i][j] = f_distance( grid_major_dist2osc[i][j] << DIST_SHIFT ) >> Z_SHIFT ;
 }
 
 
-#ifndef PBL_PLATFORM_APLITE
 void
 grid_minor_z_update
 ( )
 {
   for (int i = 0  ;  i < GRID_LINES-1  ;  i++)
     for (int j = 0  ;  j < GRID_LINES-1  ;  j++)
-      grid_minor_z[i][j] = f_distance( grid_minor_dist2osc[i][j] ) ;
+      grid_minor_z[i][j] = f_distance( grid_minor_dist2osc[i][j] << DIST_SHIFT ) >> Z_SHIFT ;
 }
-#endif
 
 
 void
@@ -939,13 +907,10 @@ grid_z_update
 {
   switch (s_pattern)
   {
-#ifndef PBL_PLATFORM_APLITE
-    case PATTERN_DUST:
+    case PATTERN_DOTS:
     case PATTERN_STRIPES:
       grid_minor_z_update( ) ;
-#endif
 
-    case PATTERN_DOTS:
     case PATTERN_GRID:
     case PATTERN_LINES:
       grid_major_z_update( ) ;
@@ -967,15 +932,15 @@ grid_major_isVisible_update
     case TRANSPARENCY_XRAY:
       for (int i = 0  ;  i < GRID_LINES  ;  ++i)
       {
-        const Q  grid_major_x_i = grid_major_x[i] ;
+        const Q  grid_major_x_i = grid_major_x[i] << COORD_SHIFT ;
 
         for (int j = 0  ;  j < GRID_LINES  ;  ++j)
           grid_major_visibility[i][j] = function_point_isVisible( (Q3){ .x = grid_major_x_i
-                                                                 , .y = grid_major_y[j]
-                                                                 , .z = grid_major_z[i][j]
-                                                                 }
-                                                           , s_cam.viewPoint
-                                                           ) ;
+                                                                      , .y = grid_major_y[j] << COORD_SHIFT
+                                                                      , .z = grid_major_z[i][j] << Z_SHIFT
+                                                                      }
+                                                                , s_cam.viewPoint
+                                                                ) ;
 
       }
     break ;
@@ -991,7 +956,6 @@ grid_major_isVisible_update
 }
 
 
-#ifndef PBL_PLATFORM_APLITE
 void
 grid_minor_isVisible_update
 ( )
@@ -1002,15 +966,15 @@ grid_minor_isVisible_update
     case TRANSPARENCY_XRAY:
       for (int i = 0  ;  i < GRID_LINES-1  ;  ++i)
       {
-        const Q  grid_minor_x_i = grid_minor_x[i] ;
+        const Q  grid_minor_x_i = grid_minor_x[i] << COORD_SHIFT ;
 
         for (int j = 0  ;  j < GRID_LINES-1  ;  ++j)
           grid_minor_visibility[i][j] = function_point_isVisible( (Q3){ .x = grid_minor_x_i
-                                                                 , .y = grid_minor_y[j]
-                                                                 , .z = grid_minor_z[i][j]
-                                                                 }
-                                                           , s_cam.viewPoint
-                                                           ) ;
+                                                                      , .y = grid_minor_y[j] << COORD_SHIFT
+                                                                      , .z = grid_minor_z[i][j] << Z_SHIFT
+                                                                      }
+                                                                , s_cam.viewPoint
+                                                                ) ;
 
       }
     break ;
@@ -1024,7 +988,6 @@ grid_minor_isVisible_update
     break ;
   }
 }
-#endif
 
 
 void
@@ -1033,13 +996,10 @@ grid_isVisible_update
 {
   switch (s_pattern)
   {
-#ifndef PBL_PLATFORM_APLITE
-    case PATTERN_DUST:
+    case PATTERN_DOTS:
     case PATTERN_STRIPES:
       grid_minor_isVisible_update( ) ;
-#endif
 
-    case PATTERN_DOTS:
     case PATTERN_GRID:
     case PATTERN_LINES:
       grid_major_isVisible_update( ) ;
@@ -1256,7 +1216,7 @@ grid_major_drawPixel
       if (grid_major_visibility[i][j])
       {
         #ifdef PBL_COLOR
-          set_stroke_color( gCtx, grid_major_z[i][j], grid_major_dist2osc[i][j] ) ;
+          set_stroke_color( gCtx, grid_major_z[i][j] << Z_SHIFT, grid_major_dist2osc[i][j] << DIST_SHIFT ) ;
         #endif
 
         graphics_draw_pixel( gCtx, grid_major_screen[i][j] ) ;
@@ -1273,7 +1233,7 @@ grid_major_drawPixel_XRAY
       if (!grid_major_visibility[i][j])
       {
         #ifdef PBL_COLOR
-          set_stroke_color( gCtx, grid_major_z[i][j], grid_major_dist2osc[i][j] ) ;
+          set_stroke_color( gCtx, grid_major_z[i][j] << Z_SHIFT, grid_major_dist2osc[i][j] << DIST_SHIFT ) ;
         #endif
 
         graphics_draw_pixel( gCtx, grid_major_screen[i][j] ) ;
@@ -1281,7 +1241,6 @@ grid_major_drawPixel_XRAY
 }
 
 
-#ifndef PBL_PLATFORM_APLITE
 void
 grid_minor_drawPixel_XRAY
 ( GContext *gCtx )
@@ -1291,7 +1250,7 @@ grid_minor_drawPixel_XRAY
       if (!grid_minor_visibility[i][j])
       {
         #ifdef PBL_COLOR
-          set_stroke_color( gCtx, grid_minor_z[i][j], grid_minor_dist2osc[i][j] ) ;
+          set_stroke_color( gCtx, grid_minor_z[i][j] << Z_SHIFT, grid_minor_dist2osc[i][j] << DIST_SHIFT ) ;
         #endif
 
         graphics_draw_pixel( gCtx, grid_minor_screen[i][j] ) ;
@@ -1308,13 +1267,12 @@ grid_minor_drawPixel
       if (grid_minor_visibility[i][j])
       {
         #ifdef PBL_COLOR
-          set_stroke_color( gCtx, grid_minor_z[i][j], grid_minor_dist2osc[i][j] ) ;
+          set_stroke_color( gCtx, grid_minor_z[i][j] << Z_SHIFT, grid_minor_dist2osc[i][j] << DIST_SHIFT ) ;
         #endif
 
         graphics_draw_pixel( gCtx, grid_minor_screen[i][j] ) ;
       }
 }
-#endif
 
 
 void
@@ -1405,27 +1363,27 @@ grid_major_drawLineX
 , int       j
 )
 {
-  const Q grid_major_yj = grid_major_y[j] ;
+  const Q grid_major_yj = grid_major_y[j] << COORD_SHIFT ;
 
   for (int i = 0  ;  i < GRID_LINES-1 ;  ++i)
   {
     const int i1 = i + 1 ;
 
     function_draw_lineSegment( gCtx
-                             , (Q3){ .x = grid_major_x[i]
+                             , (Q3){ .x = grid_major_x[i] << COORD_SHIFT
                                    , .y = grid_major_yj
-                                   , .z = grid_major_z[i][j]
+                                   , .z = grid_major_z[i][j] << Z_SHIFT
                                    }
                              , grid_major_visibility[i][j]
-                             , grid_major_dist2osc[i][j]
+                             , grid_major_dist2osc[i][j] << DIST_SHIFT
                              , grid_major_screen[i][j]
 
-                             , (Q3){ .x = grid_major_x[i1]
+                             , (Q3){ .x = grid_major_x[i1] << COORD_SHIFT
                                    , .y = grid_major_yj
-                                   , .z = grid_major_z[i1][j]
+                                   , .z = grid_major_z[i1][j] << Z_SHIFT
                                    }
                              , grid_major_visibility[i1][j]
-                             , grid_major_dist2osc[i1][j]
+                             , grid_major_dist2osc[i1][j] << DIST_SHIFT
                              , grid_major_screen[i1][j]
 
                              , s_cam.viewPoint
@@ -1441,7 +1399,7 @@ grid_major_drawLineY
 , int       i
 )
 {
-  const Q grid_major_xi = grid_major_x[i] ;
+  const Q grid_major_xi = grid_major_x[i] << COORD_SHIFT ;
 
   for (int j = 0  ;  j < GRID_LINES-1 ;  ++j)
   {
@@ -1449,19 +1407,19 @@ grid_major_drawLineY
 
     function_draw_lineSegment( gCtx
                              , (Q3){ .x = grid_major_xi
-                                   , .y = grid_major_y[j]
-                                   , .z = grid_major_z[i][j]
+                                   , .y = grid_major_y[j] << COORD_SHIFT
+                                   , .z = grid_major_z[i][j] << Z_SHIFT
                                    }
                              , grid_major_visibility[i][j]
-                             , grid_major_dist2osc[i][j]
+                             , grid_major_dist2osc[i][j] << DIST_SHIFT
                              , grid_major_screen[i][j]
 
                              , (Q3){ .x = grid_major_xi
-                                   , .y = grid_major_y[j1]
-                                   , .z = grid_major_z[i][j1]
+                                   , .y = grid_major_y[j1] << COORD_SHIFT
+                                   , .z = grid_major_z[i][j1] << Z_SHIFT
                                    }
                              , grid_major_visibility[i][j1]
-                             , grid_major_dist2osc[i][j1]
+                             , grid_major_dist2osc[i][j1] << DIST_SHIFT
                              , grid_major_screen[i][j1]
 
                              , s_cam.viewPoint
@@ -1494,47 +1452,46 @@ grid_major_screen_project
 {
   for (int i = 0  ;  i < GRID_LINES  ;  ++i)
   {
-    const Q grid_major_x_i = grid_major_x[i] ;
+    const Q grid_major_x_i = grid_major_x[i] << COORD_SHIFT ;
 
     for (int j = 0  ;  j < GRID_LINES  ;  ++j)
       screen_project( &grid_major_screen[i][j]
                     , (Q3){ .x = grid_major_x_i
-                          , .y = grid_major_y[j]
-                          , .z = grid_major_z[i][j]
+                          , .y = grid_major_y[j] << COORD_SHIFT
+                          , .z = grid_major_z[i][j] << Z_SHIFT
                           }
                     ) ;
   }
 }
 
 
-#ifndef PBL_PLATFORM_APLITE
 void
 grid_minor_drawLineX
 ( GContext *gCtx
 , int       j
 )
 {
-  const Q grid_minor_yj = grid_minor_y[j] ;
+  const Q grid_minor_yj = grid_minor_y[j] << COORD_SHIFT ;
 
   for (int i = 0  ;  i < GRID_LINES-2 ;  ++i)
   {
     const int i1 = i + 1 ;
 
     function_draw_lineSegment( gCtx
-                             , (Q3){ .x = grid_minor_x[i]
+                             , (Q3){ .x = grid_minor_x[i] << COORD_SHIFT
                                    , .y = grid_minor_yj
-                                   , .z = grid_minor_z[i][j]
+                                   , .z = grid_minor_z[i][j] << Z_SHIFT
                                    }
                              , grid_minor_visibility[i][j]
-                             , grid_minor_dist2osc[i][j]
+                             , grid_minor_dist2osc[i][j] << DIST_SHIFT
                              , grid_minor_screen[i][j]
 
-                             , (Q3){ .x = grid_minor_x[i1]
+                             , (Q3){ .x = grid_minor_x[i1] << COORD_SHIFT
                                    , .y = grid_minor_yj
-                                   , .z = grid_minor_z[i1][j]
+                                   , .z = grid_minor_z[i1][j] << Z_SHIFT
                                    }
                              , grid_minor_visibility[i1][j]
-                             , grid_minor_dist2osc[i1][j]
+                             , grid_minor_dist2osc[i1][j] << DIST_SHIFT
                              , grid_minor_screen[i1][j]
 
                              , s_cam.viewPoint
@@ -1558,18 +1515,17 @@ grid_minor_screen_project
 {
   for (int i = 0  ;  i < GRID_LINES-1  ;  ++i)
   {
-    const Q grid_minor_x_i = grid_minor_x[i] ;
+    const Q grid_minor_x_i = grid_minor_x[i] << COORD_SHIFT ;
 
     for (int j = 0  ;  j < GRID_LINES-1  ;  ++j)
       screen_project( &grid_minor_screen[i][j]
                     , (Q3){ .x = grid_minor_x_i
-                          , .y = grid_minor_y[j]
-                          , .z = grid_minor_z[i][j]
+                          , .y = grid_minor_y[j] << COORD_SHIFT
+                          , .z = grid_minor_z[i][j] << Z_SHIFT
                           }
                     ) ;
   }
 }
-#endif
 
 
 void
@@ -1578,13 +1534,10 @@ grid_screen_project
 {
   switch (s_pattern)
   {
-#ifndef PBL_PLATFORM_APLITE
-    case PATTERN_DUST:
+    case PATTERN_DOTS:
     case PATTERN_STRIPES:
       grid_minor_screen_project( ) ;
-#endif
 
-    case PATTERN_DOTS:
     case PATTERN_LINES:
     case PATTERN_GRID:
       grid_major_screen_project( ) ;
@@ -1615,17 +1568,32 @@ world_draw
   // Draw the calculated screen points.
   switch (s_pattern)
   {
-#ifndef PBL_PLATFORM_APLITE
-    case PATTERN_DUST:
+    case PATTERN_DOTS:
+      if (s_transparency == TRANSPARENCY_XRAY)
+      {
+        grid_major_drawPixel_XRAY( gCtx ) ;
+        grid_minor_drawPixel_XRAY( gCtx ) ;
+      }
+
+      grid_major_drawPixel( gCtx ) ;
+      grid_minor_drawPixel( gCtx ) ;
+
+      // Grid frame.
+      grid_major_drawLineX( gCtx, 0            ) ;
+      grid_major_drawLineX( gCtx, GRID_LINES-1 ) ;
+      grid_major_drawLineY( gCtx, 0            ) ;
+      grid_major_drawLineY( gCtx, GRID_LINES-1 ) ;
+    break ;
+
+    case PATTERN_LINES:
       if (s_transparency == TRANSPARENCY_XRAY)
         grid_major_drawPixel_XRAY( gCtx ) ;
 
-      grid_major_drawPixel( gCtx ) ;
-      grid_major_drawLineX( gCtx, 0 ) ;
-      grid_major_drawLineX( gCtx, GRID_LINES-1 ) ;
-      grid_major_drawLineY( gCtx, 0 ) ;
+      grid_major_drawLinesX( gCtx ) ;
+
+      // Grid frame.
+      grid_major_drawLineY( gCtx, 0            ) ;
       grid_major_drawLineY( gCtx, GRID_LINES-1 ) ;
-      grid_minor_drawPixel( gCtx ) ;
     break ;
 
     case PATTERN_STRIPES:
@@ -1636,29 +1604,10 @@ world_draw
       }
 
       grid_major_drawLinesX( gCtx ) ;
-      grid_major_drawLineY( gCtx, 0 ) ;
-      grid_major_drawLineY( gCtx, GRID_LINES-1 ) ;
       grid_minor_drawLinesX( gCtx ) ;
-    break ;
-#endif
 
-    case PATTERN_DOTS:
-      if (s_transparency == TRANSPARENCY_XRAY)
-        grid_major_drawPixel_XRAY( gCtx ) ;
-
-      grid_major_drawPixel( gCtx ) ;
-      grid_major_drawLineX( gCtx, 0 ) ;
-      grid_major_drawLineX( gCtx, GRID_LINES-1 ) ;
-      grid_major_drawLineY( gCtx, 0 ) ;
-      grid_major_drawLineY( gCtx, GRID_LINES-1 ) ;
-    break ;
-
-    case PATTERN_LINES:
-      if (s_transparency == TRANSPARENCY_XRAY)
-        grid_major_drawPixel_XRAY( gCtx ) ;
-
-      grid_major_drawLinesX( gCtx ) ;
-      grid_major_drawLineY( gCtx, 0 ) ;
+      // Grid frame.
+      grid_major_drawLineY( gCtx, 0            ) ;
       grid_major_drawLineY( gCtx, GRID_LINES-1 ) ;
     break ;
 

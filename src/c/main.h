@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 16h45 September 17 2016  GMT
+   Last revision: 19h35 September 19 2016  GMT
 */
 
 #include "Config.h"
@@ -27,11 +27,8 @@ static Colorization  s_colorization = COLORIZATION_UNDEFINED ;
 
 typedef enum { PATTERN_UNDEFINED
              , PATTERN_DOTS
-#ifndef PBL_PLATFORM_APLITE
-             , PATTERN_DUST
-             , PATTERN_STRIPES
-#endif
              , PATTERN_LINES
+             , PATTERN_STRIPES
              , PATTERN_GRID
              }
 Pattern ;
@@ -107,15 +104,18 @@ static Transparency  s_transparency = TRANSPARENCY_UNDEFINED ;
 
 /* -----------   GRID/CAMERA PARAMETERS   ----------- */
 
-#define  GRID_LINES                 29
-#define  GRID_SCALE                 9.42477795f
-#define  CAM3D_DISTANCEFROMORIGIN   11.5f
+#ifdef PBL_COLOR
+  #define  GRID_LINES     27
+#else
+  // Any more lines and APLITE will crash.
+  #define  GRID_LINES     25
+#endif
 
-/*
-#define  GRID_LINES                 29
-#define  GRID_SCALE                 6.283185f
-#define  CAM3D_DISTANCEFROMORIGIN   8.75f
-*/
+// The GRID_SCALE value bellow has been precison engineered as to saturate x,y grid coord tables in signed Q3.12 format (int16_t),
+// make 100% SURE you do the proper (required) adjustments if you ever change this value.
+#define  GRID_SCALE                 7.9999f
+
+#define  CAM3D_DISTANCEFROMORIGIN   9.75f
 
 
 /* -----------   PHYSICS PARAMETERS   ----------- */
