@@ -5,65 +5,96 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 01h15 September 16 2016  GMT
+   Last revision: 16h45 September 17 2016  GMT
 */
 
 #include "Config.h"
 
 
-// World related
+/***  ---------------  COLORIZATION  ---------------  ***/
 
-#ifdef PBL_PLATFORM_APLITE
-  #define  GRID_LINES               29
-#else
-  #define  GRID_LINES               31
+typedef enum { COLORIZATION_UNDEFINED
+             , COLORIZATION_MONO
+             , COLORIZATION_SIGNAL
+             , COLORIZATION_DIST
+             }
+Colorization ;
+
+static Colorization  s_colorization = COLORIZATION_UNDEFINED ;
+
+
+/***  ---------------  PATTERN  ---------------  ***/
+
+typedef enum { PATTERN_UNDEFINED
+             , PATTERN_DOTS
+#ifndef PBL_PLATFORM_APLITE
+             , PATTERN_DUST
+             , PATTERN_STRIPES
 #endif
+             , PATTERN_LINES
+             , PATTERN_GRID
+             }
+Pattern ;
+
+static Pattern  s_pattern = PATTERN_UNDEFINED ;
+
+
+/***  ---------------  OSCILLATOR  ---------------  ***/
+
+typedef enum { OSCILLATOR_UNDEFINED
+             , OSCILLATOR_ANCHORED
+             , OSCILLATOR_FLOATING
+             , OSCILLATOR_BOUNCING
+             }
+Oscilator ;
+
+static Oscilator  s_oscillator = OSCILLATOR_UNDEFINED ;
+
+
+/***  ---------------  TRANSPARENCY  ---------------  ***/
+
+typedef enum { TRANSPARENCY_UNDEFINED
+             , TRANSPARENCY_OPAQUE
+             , TRANSPARENCY_TRANSLUCENT
+             , TRANSPARENCY_XRAY
+             }
+Transparency ;
+
+static Transparency  s_transparency = TRANSPARENCY_UNDEFINED ;
 
 
 /* -----------   Default modes   ----------- */
 
 #ifdef GIF
-  #define  ANTIALIASING_DEFAULT       false
-  #define  OSCILLATOR_MODE_DEFAULT    OSCILLATOR_MODE_ANCHORED
-  #define  PLOTTER_MODE_DEFAULT       PLOTTER_MODE_DOTS1
-  #define  TRANSPARENCY_DEFAULT       TRANSPARENCY_TRANSLUCENT
-  #define  ANIMATION_INTERVAL_MS      100
+  #define  ANTIALIASING_DEFAULT    true
+  #define  OSCILLATOR_DEFAULT      OSCILLATOR_ANCHORED
+
+  #ifdef PBL_PLATFORM_APLITE
+    #define  PATTERN_DEFAULT       PATTERN_DOTS
+  #else
+    #define  PATTERN_DEFAULT       PATTERN_STRIPES
+  #endif
+
+  #define  TRANSPARENCY_DEFAULT    TRANSPARENCY_OPAQUE
+  #define  ANIMATION_INTERVAL_MS   250
 #else
-  #define  ANTIALIASING_DEFAULT       false
-  #define  OSCILLATOR_MODE_DEFAULT    OSCILLATOR_MODE_ANCHORED
-  #define  PLOTTER_MODE_DEFAULT       PLOTTER_MODE_LINES
-  #define  TRANSPARENCY_DEFAULT       TRANSPARENCY_TRANSLUCENT
+  #define  ANTIALIASING_DEFAULT    false
+  #define  OSCILLATOR_DEFAULT      OSCILLATOR_ANCHORED
+  #define  PATTERN_DEFAULT         PATTERN_LINES
+  #define  TRANSPARENCY_DEFAULT    TRANSPARENCY_TRANSLUCENT
 
   #ifdef EMU
-    #define  ANIMATION_INTERVAL_MS    50
+    #define  ANIMATION_INTERVAL_MS    80
   #else
-    #define  ANIMATION_INTERVAL_MS    40
+    #define  ANIMATION_INTERVAL_MS    50
   #endif
 #endif
 
 
-/*   Catalog of choices
-  #define  OSCILLATOR_MODE_DEFAULT     OSCILLATOR_MODE_ANCHORED
-  #define  OSCILLATOR_MODE_DEFAULT     OSCILLATOR_MODE_FLOATING
-  #define  OSCILLATOR_MODE_DEFAULT     OSCILLATOR_MODE_BOUNCING
-
-  #define  PLOTTER_MODE_DEFAULT       PLOTTER_MODE_DOTS1
-  #define  PLOTTER_MODE_DEFAULT       PLOTTER_MODE_DOTS2
-  #define  PLOTTER_MODE_DEFAULT       PLOTTER_MODE_LINES
-  #define  PLOTTER_MODE_DEFAULT       PLOTTER_MODE_GRID
-
-  #define  TRANSPARENCY_DEFAULT       TRANSPARENCY_OPAQUE
-  #define  TRANSPARENCY_DEFAULT       TRANSPARENCY_TRANSLUCENT
-
-  #define  ANTIALIASING_DEFAULT       false
-  #define  ANTIALIASING_DEFAULT       true
-*/
-
-
 #ifdef PBL_COLOR
-  #define  COLOR_MODE_DEFAULT       COLOR_MODE_DIST
+  #define  COLORIZATION_DEFAULT       COLORIZATION_DIST
 #else
-  #define  COLOR_MODE_DEFAULT       COLOR_MODE_MONO
+  #define  COLORIZATION_DEFAULT       COLORIZATION_MONO
 #endif
 
 
@@ -76,8 +107,15 @@
 
 /* -----------   GRID/CAMERA PARAMETERS   ----------- */
 
+#define  GRID_LINES                 29
+#define  GRID_SCALE                 9.42477795f
+#define  CAM3D_DISTANCEFROMORIGIN   11.5f
+
+/*
+#define  GRID_LINES                 29
 #define  GRID_SCALE                 6.283185f
 #define  CAM3D_DISTANCEFROMORIGIN   8.75f
+*/
 
 
 /* -----------   PHYSICS PARAMETERS   ----------- */
