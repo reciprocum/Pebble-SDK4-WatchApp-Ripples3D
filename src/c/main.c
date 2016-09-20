@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 09h45 September 20 2016  GMT
+   Last revision: 18h25 September 20 2016  GMT
 */
 
 #include <pebble.h>
@@ -31,23 +31,59 @@ static Q world_xMin, world_xMax, world_yMin, world_yMax, world_zMin, world_zMax 
 const Q  grid_scale     = Q_from_float(GRID_SCALE) ;
 const Q  grid_halfScale = Q_from_float(GRID_SCALE) >> 1 ;   //  scale / 2
 
+
+typedef struct
+{
+  bool fromCam   :1 ;
+  bool fromLight1:1 ;
+  bool fromLight2:1 ;
+  bool fromLight3:1 ;
+} Visibility ;
+
+typedef struct
+{
+  bool xMajor:1 ;
+  bool xMinor:1 ;
+  bool yMajor:1 ;
+  bool yMinor:1 ;
+  bool zMajor:1 ;
+  bool zMinor:1 ;
+} Boxing ;
+
+
+Boxing
+world_boxing( Q3 p )
+{
+  Boxing boxing ;
+
+  boxing.xMajor = (p.x > world_xMax) ;
+  boxing.xMinor = (p.x < world_xMin) ;
+  boxing.yMajor = (p.y > world_yMax) ;
+  boxing.yMinor = (p.y < world_yMin) ;
+  boxing.zMajor = (p.z > world_zMax) ;
+  boxing.zMinor = (p.z < world_zMin) ;
+  
+  return boxing ;
+}
+
+
 #define COORD_SHIFT  4
 #define Z_SHIFT      9
 #define DIST_SHIFT   4
 
-static int16_t  grid_major_x         [GRID_LINES] ;                   // Q3.12  Coords [-7.999,+7.999]
-static int16_t  grid_major_y         [GRID_LINES] ;                   // Q3.12  Coords [-7.999,+7.999]
-static int8_t   grid_major_z         [GRID_LINES][GRID_LINES] ;       // Q0.7   f(x,y) [-0.99, +0.99]
-static uint16_t grid_major_dist2osc  [GRID_LINES][GRID_LINES] ;       // Q4.12  Need integer part up to 11.3137 because of max diagonal distance for bouncing oscillator.
-static bool     grid_major_visibility[GRID_LINES][GRID_LINES] ;
-static GPoint   grid_major_screen    [GRID_LINES][GRID_LINES] ;
+static int16_t    grid_major_x         [GRID_LINES] ;                   // sQ3.12  Coords [-7.999,+7.999]
+static int16_t    grid_major_y         [GRID_LINES] ;                   // sQ3.12  Coords [-7.999,+7.999]
+static int8_t     grid_major_z         [GRID_LINES][GRID_LINES] ;       // sQ0.7   f(x,y) [-0.99, +0.99]
+static uint16_t   grid_major_dist2osc  [GRID_LINES][GRID_LINES] ;       // uQ4.12  Need integer part up to 11.3137 because of max diagonal distance for bouncing oscillator.
+static Visibility grid_major_visibility[GRID_LINES][GRID_LINES] ;
+static GPoint     grid_major_screen    [GRID_LINES][GRID_LINES] ;
 
-static int16_t  grid_minor_x         [GRID_LINES-1] ;                 // Q3.12  Coords [-7.999,+7.999]
-static int16_t  grid_minor_y         [GRID_LINES-1] ;                 // Q3.12  Coords [-7.999,+7.999]
-static int8_t   grid_minor_z         [GRID_LINES-1][GRID_LINES-1] ;   // Q0.7   f(x,y) [-0.99, +0.99]
-static uint16_t grid_minor_dist2osc  [GRID_LINES-1][GRID_LINES-1] ;   // Q4.12  Need integer part up to sqrt(2) * GRID_SCALE because of max diagonal distance for bouncing oscillator.
-static bool     grid_minor_visibility[GRID_LINES-1][GRID_LINES-1] ;
-static GPoint   grid_minor_screen    [GRID_LINES-1][GRID_LINES-1] ;
+static int16_t    grid_minor_x         [GRID_LINES-1] ;                 // sQ3.12  Coords [-7.999,+7.999]
+static int16_t    grid_minor_y         [GRID_LINES-1] ;                 // sQ3.12  Coords [-7.999,+7.999]
+static int8_t     grid_minor_z         [GRID_LINES-1][GRID_LINES-1] ;   // sQ0.7   f(x,y) [-0.99, +0.99]
+static uint16_t   grid_minor_dist2osc  [GRID_LINES-1][GRID_LINES-1] ;   // uQ4.12  Need integer part up to sqrt(2) * GRID_SCALE because of max diagonal distance for bouncing oscillator.
+static Visibility grid_minor_visibility[GRID_LINES-1][GRID_LINES-1] ;
+static GPoint     grid_minor_screen    [GRID_LINES-1][GRID_LINES-1] ;
 
 static Q        dy2[GRID_LINES] ;   // Auxiliary array.
 
@@ -75,7 +111,7 @@ cam_config
 
 void grid_minor_dist2osc_update( ) ;
 void grid_minor_z_update( ) ;
-void grid_minor_isVisible_update( ) ;
+void grid_minor_visibilityFromCam_update( ) ;
 
 
 /***  ---------------  COLORIZATION  ---------------  ***/
@@ -142,7 +178,7 @@ pattern_set
     case PATTERN_STRIPES:
       grid_minor_dist2osc_update( ) ;
       grid_minor_z_update( ) ;
-      grid_minor_isVisible_update( ) ;
+      grid_minor_visibilityFromCam_update( ) ;
     break ;
 
     default:
@@ -210,12 +246,12 @@ transparency_set
       // Set all major to true.
       for (int i = 0  ;  i < GRID_LINES  ;  ++i)
         for (int j = 0  ;  j < GRID_LINES  ;  ++j)
-          grid_major_visibility[i][j] = true ;
+          grid_major_visibility[i][j].fromCam = true ;
 
       // Set all minor to true.
       for (int i = 0  ;  i < GRID_LINES-1  ;  ++i)
         for (int j = 0  ;  j < GRID_LINES-1  ;  ++j)
-          grid_minor_visibility[i][j] = true ;
+          grid_minor_visibility[i][j].fromCam = true ;
     break ;
 
     case TRANSPARENCY_UNDEFINED:
@@ -264,6 +300,7 @@ transparency_change_click_handler
 
 static CamQ3   s_cam ;
 static Q3      s_cam_viewPoint ;
+static Boxing  s_cam_viewPoint_boxing ;
 static Q       s_cam_zoom        = PBL_IF_RECT_ELSE(Q_from_float(+1.25f), Q_from_float(+1.15f)) ;
 static int32_t s_cam_rotZangle = 0
              , s_cam_rotXangle = 0
@@ -326,6 +363,8 @@ cam_config
                            , s_cam_zoom
                            , CAM_PROJECTION_PERSPECTIVE
                            ) ;
+
+  s_cam_viewPoint_boxing = world_boxing( s_cam.viewPoint ) ;
 }
 
 
@@ -465,42 +504,28 @@ f_XY
 /***  ---------------  Hidden line removal  ---------------  ***/
 
 bool
-function_point_isVisible
-( const Q3 point
-, const Q3 viewPoint
+function_isVisible_fromPoint
+( const Q3     point
+, const Q3     viewPoint
+, const Boxing viewPointBoxing
 )
 {
-  switch (s_transparency)
-  {
-    case TRANSPARENCY_TRANSLUCENT:
-      return true ;
-    break ;
-
-    case TRANSPARENCY_UNDEFINED:
-      return false ;
-    break ;
-
-    case TRANSPARENCY_XRAY:
-    case TRANSPARENCY_OPAQUE:
-    break ;
-  }
-
   Q3 point2viewer ;  Q3_sub( &point2viewer, &viewPoint, &point ) ;
   Q  k ;
 
   //  1) Clip the view line to the nearest min/max box wall.
-  if (viewPoint.x > world_xMax)
+  if (viewPointBoxing.xMajor)
     k = Q_div( world_xMax - point.x, point2viewer.x ) ;
-  else if (viewPoint.x < world_xMin)
+  else if (viewPointBoxing.xMinor)
     k = Q_div( world_xMin - point.x, point2viewer.x ) ;
   else
     k = Q_1 ;
 
   Q kMin = k ;
 
-  if (viewPoint.y > world_yMax)
+  if (viewPointBoxing.yMajor)
     k = Q_div( world_yMax - point.y, point2viewer.y ) ;
-  else if (viewPoint.y < world_yMin)
+  else if (viewPointBoxing.yMinor)
     k = Q_div( world_yMin - point.y, point2viewer.y ) ;
   else
     k = Q_1 ;
@@ -508,9 +533,9 @@ function_point_isVisible
   if (k < kMin)
     kMin = k ;
 
-  if (viewPoint.z > world_zMax)
+  if (viewPointBoxing.zMajor)
     k = Q_div( world_zMax - point.z, point2viewer.z ) ;
-  else if (viewPoint.z < world_zMin)
+  else if (viewPointBoxing.zMinor)
     k = Q_div( world_zMin - point.z, point2viewer.z ) ;
   else
     k = Q_1 ;
@@ -930,7 +955,7 @@ grid_z_update
 
 
 void
-grid_major_isVisible_update
+grid_major_visibilityFromCam_update
 ( )
 {
   switch (s_transparency)
@@ -942,13 +967,13 @@ grid_major_isVisible_update
         const Q  grid_major_x_i = grid_major_x[i] << COORD_SHIFT ;
 
         for (int j = 0  ;  j < GRID_LINES  ;  ++j)
-          grid_major_visibility[i][j] = function_point_isVisible( (Q3){ .x = grid_major_x_i
-                                                                      , .y = grid_major_y[j] << COORD_SHIFT
-                                                                      , .z = grid_major_z[i][j] << Z_SHIFT
-                                                                      }
-                                                                , s_cam.viewPoint
-                                                                ) ;
-
+          grid_major_visibility[i][j].fromCam = function_isVisible_fromPoint( (Q3){ .x = grid_major_x_i
+                                        																				  , .y = grid_major_y[j] << COORD_SHIFT
+                                        																				  , .z = grid_major_z[i][j] << Z_SHIFT
+                                        																				  }
+                                        																		, s_cam.viewPoint
+                                        																		, s_cam_viewPoint_boxing
+                                        																		) ;
       }
     break ;
 
@@ -964,7 +989,7 @@ grid_major_isVisible_update
 
 
 void
-grid_minor_isVisible_update
+grid_minor_visibilityFromCam_update
 ( )
 {
   switch (s_transparency)
@@ -976,13 +1001,13 @@ grid_minor_isVisible_update
         const Q  grid_minor_x_i = grid_minor_x[i] << COORD_SHIFT ;
 
         for (int j = 0  ;  j < GRID_LINES-1  ;  ++j)
-          grid_minor_visibility[i][j] = function_point_isVisible( (Q3){ .x = grid_minor_x_i
-                                                                      , .y = grid_minor_y[j] << COORD_SHIFT
-                                                                      , .z = grid_minor_z[i][j] << Z_SHIFT
-                                                                      }
-                                                                , s_cam.viewPoint
-                                                                ) ;
-
+          grid_minor_visibility[i][j].fromCam = function_isVisible_fromPoint( (Q3){ .x = grid_minor_x_i
+                                                                                  , .y = grid_minor_y[j] << COORD_SHIFT
+                                                                                  , .z = grid_minor_z[i][j] << Z_SHIFT
+                                                                                  }
+                                                                            , s_cam.viewPoint
+                                        																		, s_cam_viewPoint_boxing
+                                                                            ) ;
       }
     break ;
 
@@ -1005,11 +1030,11 @@ grid_isVisible_update
   {
     case PATTERN_DOTS:
     case PATTERN_STRIPES:
-      grid_minor_isVisible_update( ) ;
+      grid_minor_visibilityFromCam_update( ) ;
 
     case PATTERN_GRID:
     case PATTERN_LINES:
-      grid_major_isVisible_update( ) ;
+      grid_major_visibilityFromCam_update( ) ;
     break ;
 
     case PATTERN_UNDEFINED:
@@ -1222,7 +1247,7 @@ grid_major_drawPixel
 {
   for (int i = 0  ;  i < GRID_LINES  ;  ++i)
     for (int j = 0  ;  j < GRID_LINES  ;  ++j)
-      if (grid_major_visibility[i][j])
+      if (grid_major_visibility[i][j].fromCam)
       {
         #ifdef PBL_COLOR
           set_stroke_color( gCtx, grid_major_z[i][j] << Z_SHIFT, grid_major_dist2osc[i][j] << DIST_SHIFT ) ;
@@ -1239,7 +1264,7 @@ grid_major_drawPixel_XRAY
 {
   for (int i = 0  ;  i < GRID_LINES  ;  ++i)
     for (int j = 0  ;  j < GRID_LINES  ;  ++j)
-      if (!grid_major_visibility[i][j])
+      if (!grid_major_visibility[i][j].fromCam)
       {
         #ifdef PBL_COLOR
           set_stroke_color( gCtx, grid_major_z[i][j] << Z_SHIFT, grid_major_dist2osc[i][j] << DIST_SHIFT ) ;
@@ -1256,7 +1281,7 @@ grid_minor_drawPixel_XRAY
 {
   for (int i = 0  ;  i < GRID_LINES-1  ;  ++i)
     for (int j = 0  ;  j < GRID_LINES-1  ;  ++j)
-      if (!grid_minor_visibility[i][j])
+      if (!grid_minor_visibility[i][j].fromCam)
       {
         #ifdef PBL_COLOR
           set_stroke_color( gCtx, grid_minor_z[i][j] << Z_SHIFT, grid_minor_dist2osc[i][j] << DIST_SHIFT ) ;
@@ -1273,7 +1298,7 @@ grid_minor_drawPixel
 {
   for (int i = 0  ;  i < GRID_LINES-1  ;  i++)
     for (int j = 0  ;  j < GRID_LINES-1 ;  j++)
-      if (grid_minor_visibility[i][j])
+      if (grid_minor_visibility[i][j].fromCam)
       {
         #ifdef PBL_COLOR
           set_stroke_color( gCtx, grid_minor_z[i][j] << Z_SHIFT, grid_minor_dist2osc[i][j] << DIST_SHIFT ) ;
@@ -1288,25 +1313,27 @@ void
 function_draw_lineSegment
 ( GContext *gCtx
 // first point
-, Q3        p0
-, bool      p0_visibility
-, Q         p0_dist2osc
-, GPoint    s0
+, Q3         p0
+, Visibility p0_visibility
+, Q          p0_dist2osc
+, GPoint     s0
 // second point
-, Q3        p1
-, bool      p1_visibility
-, Q         p1_dist2osc
-, GPoint    s1
-, Q3        viewPoint
+, Q3         p1
+, Visibility p1_visibility
+, Q          p1_dist2osc
+, GPoint     s1
+
+, Q3         viewPoint
+, Boxing     viewPointBoxing
 )
 {
 
-  if (!p0_visibility && !p1_visibility)    //  None of the points is visible ?
+  if (!p0_visibility.fromCam && !p1_visibility.fromCam)    //  None of the points is visible ?
     return ;
 
   Q  zColor, distColor ;
 
-  if (p0_visibility && p1_visibility)      //  Both points visible ?
+  if (p0_visibility.fromCam && p1_visibility.fromCam)      //  Both points visible ?
   {
     zColor    = (p0.z        + p1.z       ) >> 1 ;   //  Average world Z.
     distColor = (p0_dist2osc + p1_dist2osc) >> 1 ;   //  Average distance 2 oscillator.
@@ -1316,7 +1343,7 @@ function_draw_lineSegment
     Q3  visible, invisible ;
     Q   visible_dist2osc ;
 
-    if (p0_visibility)
+    if (p0_visibility.fromCam)
     {
       visible   = p0 ;  visible_dist2osc = p0_dist2osc ;
       invisible = p1 ;
@@ -1338,7 +1365,7 @@ function_draw_lineSegment
       half_dist2osc = oscillator_distance( half.x, half.y ) ;
       half.z        = f_distance( half_dist2osc ) ;
 
-      if (function_point_isVisible( half, viewPoint ))
+      if (function_isVisible_fromPoint( half, viewPoint, viewPointBoxing ))
       {
         visible = half ;  visible_dist2osc = half_dist2osc ;
       }
@@ -1396,6 +1423,7 @@ grid_major_drawLineX
                              , grid_major_screen[i1][j]
 
                              , s_cam.viewPoint
+                             , s_cam_viewPoint_boxing
                              ) ;
   }
 }
@@ -1432,6 +1460,7 @@ grid_major_drawLineY
                              , grid_major_screen[i][j1]
 
                              , s_cam.viewPoint
+                             , s_cam_viewPoint_boxing
                              ) ;
   }
 }
@@ -1504,6 +1533,7 @@ grid_minor_drawLineX
                              , grid_minor_screen[i1][j]
 
                              , s_cam.viewPoint
+                             , s_cam_viewPoint_boxing
                              ) ;
   }
 }
