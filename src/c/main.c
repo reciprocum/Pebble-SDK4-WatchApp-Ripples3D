@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 19h35 September 19 2016  GMT
+   Last revision: 09h45 September 20 2016  GMT
 */
 
 #include <pebble.h>
@@ -31,14 +31,14 @@ static Q world_xMin, world_xMax, world_yMin, world_yMax, world_zMin, world_zMax 
 const Q  grid_scale     = Q_from_float(GRID_SCALE) ;
 const Q  grid_halfScale = Q_from_float(GRID_SCALE) >> 1 ;   //  scale / 2
 
+#define COORD_SHIFT  4
 #define Z_SHIFT      9
 #define DIST_SHIFT   4
-#define COORD_SHIFT  4
 
-static int16_t  grid_major_x         [GRID_LINES] ;               // Q3.12  Coords [-7.999,+7.999]
-static int16_t  grid_major_y         [GRID_LINES] ;               // Q3.12  Coords [-7.999,+7.999]
-static int8_t   grid_major_z         [GRID_LINES][GRID_LINES] ;   // Q0.7   f(x,y) [-0.99, +0.99]
-static uint16_t grid_major_dist2osc  [GRID_LINES][GRID_LINES] ;   // Q4.12  Need integer part up to 13 because of max diagonal distance for bouncing oscillator.
+static int16_t  grid_major_x         [GRID_LINES] ;                   // Q3.12  Coords [-7.999,+7.999]
+static int16_t  grid_major_y         [GRID_LINES] ;                   // Q3.12  Coords [-7.999,+7.999]
+static int8_t   grid_major_z         [GRID_LINES][GRID_LINES] ;       // Q0.7   f(x,y) [-0.99, +0.99]
+static uint16_t grid_major_dist2osc  [GRID_LINES][GRID_LINES] ;       // Q4.12  Need integer part up to 11.3137 because of max diagonal distance for bouncing oscillator.
 static bool     grid_major_visibility[GRID_LINES][GRID_LINES] ;
 static GPoint   grid_major_screen    [GRID_LINES][GRID_LINES] ;
 
@@ -48,6 +48,8 @@ static int8_t   grid_minor_z         [GRID_LINES-1][GRID_LINES-1] ;   // Q0.7   
 static uint16_t grid_minor_dist2osc  [GRID_LINES-1][GRID_LINES-1] ;   // Q4.12  Need integer part up to sqrt(2) * GRID_SCALE because of max diagonal distance for bouncing oscillator.
 static bool     grid_minor_visibility[GRID_LINES-1][GRID_LINES-1] ;
 static GPoint   grid_minor_screen    [GRID_LINES-1][GRID_LINES-1] ;
+
+static Q        dy2[GRID_LINES] ;   // Auxiliary array.
 
 static int32_t oscillator_anglePhase ;
 static Q2      oscillator_position ;
@@ -631,12 +633,12 @@ void
 grid_major_dist2osc_update
 ( )
 {
-  Q dy2[GRID_LINES-1] ;
+  Q maxDist = Q_0 ;
 
-  for (int l = 0  ;  l < GRID_LINES  ;  l++)
+  for (int j = 0  ;  j < GRID_LINES  ;  j++)
   {
-    const Q dy = oscillator_position.y - (grid_major_y[l] << COORD_SHIFT) ;
-    dy2[l] = Q_mul( dy, dy ) ;
+    const Q dy = oscillator_position.y - (grid_major_y[j] << COORD_SHIFT) ;
+    dy2[j] = Q_mul( dy, dy ) ;
   }
 
   for (int i = 0  ;  i < GRID_LINES  ;  i++)
@@ -645,7 +647,14 @@ grid_major_dist2osc_update
     const Q dx2_i = Q_mul( dx, dx ) ;
 
     for (int j = 0  ;  j < GRID_LINES  ;  j++)
-      grid_major_dist2osc[i][j] = Q_sqrt( dx2_i + dy2[j] ) >> DIST_SHIFT ;
+    {
+      const Q dist =  Q_sqrt( dx2_i + dy2[j] ) ;
+      
+      if (dist > maxDist)
+        maxDist = dist ;
+
+      grid_major_dist2osc[i][j] = dist >> DIST_SHIFT ;
+    }
   }
 }
 
@@ -654,12 +663,10 @@ void
 grid_minor_dist2osc_update
 ( )
 {
-  Q dy2[GRID_LINES-1] ;
-
-  for (int l = 0  ;  l < GRID_LINES-1  ;  l++)
+  for (int j = 0  ;  j < GRID_LINES-1  ;  j++)
   {
-    const Q dy = oscillator_position.y - (grid_minor_y[l] << COORD_SHIFT) ;
-    dy2[l] = Q_mul( dy, dy ) ;
+    const Q dy = oscillator_position.y - (grid_minor_y[j] << COORD_SHIFT) ;
+    dy2[j] = Q_mul( dy, dy ) ;
   }
 
   for (int i = 0  ;  i < GRID_LINES-1  ;  i++)
@@ -1140,12 +1147,14 @@ oscillator_update
     break ;
 
     case OSCILLATOR_BOUNCING:
-      //  1) set oscillator acceleration from sensor readings
-      acceleration_setFromSensors( &oscillator_acceleration ) ;
-
-      //  2) update oscillator speed with oscillator acceleration
-      // TODO: prevent acceleration to act when position is "on the ropes".
-      Q2_add( &oscillator_speed, &oscillator_speed, &oscillator_acceleration ) ;   //  oscillator_speed += oscillator_acceleration
+      #ifndef GIF
+        //  1) set oscillator acceleration from sensor readings
+        acceleration_setFromSensors( &oscillator_acceleration ) ;
+  
+        //  2) update oscillator speed with oscillator acceleration
+        // TODO: prevent acceleration to act when position is "on the ropes".
+        Q2_add( &oscillator_speed, &oscillator_speed, &oscillator_acceleration ) ;   //  oscillator_speed += oscillator_acceleration
+      #endif
 
       //  3) affect oscillator position given current oscillator speed
       Q2_add( &oscillator_position, &oscillator_position, &oscillator_speed ) ;   //  oscillator_position += oscillator_speed
@@ -1555,7 +1564,9 @@ world_draw
 , GContext *gCtx
 )
 {
+#ifdef GIF
   LOGD( "world_draw:: s_world_updateCount = %d", s_world_updateCount ) ;
+#endif
 
 #ifdef PBL_COLOR
   graphics_context_set_antialiased( gCtx, s_antialiasing ) ;
