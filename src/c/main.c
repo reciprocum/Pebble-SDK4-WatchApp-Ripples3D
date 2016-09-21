@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 19h15 September 20 2016  GMT
+   Last revision: 09h15 September 21 2016  GMT
 */
 
 #include <pebble.h>
@@ -17,6 +17,7 @@
 
 #include "main.h"
 #include "Config.h"
+#include "types.h"
 
 
 // UI related
@@ -26,29 +27,15 @@ static Layer          *s_world_layer ;
 static ActionBarLayer *s_action_bar_layer ;
 
 // World related
-static Q world_xMin, world_xMax, world_yMin, world_yMax, world_zMin, world_zMax ;
+const  Q             grid_scale     = Q_from_float(GRID_SCALE) ;
+const  Q             grid_halfScale = Q_from_float(GRID_SCALE) >> 1 ;   //  scale / 2
 
-const Q  grid_scale     = Q_from_float(GRID_SCALE) ;
-const Q  grid_halfScale = Q_from_float(GRID_SCALE) >> 1 ;   //  scale / 2
+static Colorization  s_colorization = COLORIZATION_UNDEFINED ;
+static Pattern       s_pattern      = PATTERN_UNDEFINED ;
+static Oscilator     s_oscillator   = OSCILLATOR_UNDEFINED ;
+static Transparency  s_transparency = TRANSPARENCY_UNDEFINED ;
 
-
-typedef struct
-{
-  bool fromCam   :1 ;
-  bool fromLight1:1 ;
-  bool fromLight2:1 ;
-  bool fromLight3:1 ;
-} Visibility ;
-
-typedef struct
-{
-  bool xMajor:1 ;
-  bool xMinor:1 ;
-  bool yMajor:1 ;
-  bool yMinor:1 ;
-  bool zMajor:1 ;
-  bool zMinor:1 ;
-} Boxing ;
+static Q             world_xMin, world_xMax, world_yMin, world_yMax, world_zMin, world_zMax ;
 
 
 Boxing
@@ -1311,88 +1298,76 @@ grid_minor_drawPixel
 
 void
 function_draw_lineSegment
-( GContext *gCtx
-// first point
-, Q3         p0
-, Visibility p0_visibility
-, Q          p0_dist2osc
-, GPoint     s0
-// second point
-, Q3         p1
-, Visibility p1_visibility
-, Q          p1_dist2osc
-, GPoint     s1
-
-, Q3         viewPoint
-, Boxing     viewPointBoxing
+( GContext    *gCtx
+, const Fuxel  f0
+, const Fuxel  f1
+, Q3           viewPoint
+, Boxing       viewPointBoxing
 )
 {
-
-  if (!p0_visibility.fromCam && !p1_visibility.fromCam)    //  None of the points is visible ?
+  if (!f0.visibility.fromCam && !f1.visibility.fromCam)    //  None of the points is visible ?
     return ;
 
-  Q  zColor, distColor ;
+  Fuxel  draw0, draw1 ;
 
-  if (p0_visibility.fromCam && p1_visibility.fromCam)      //  Both points visible ?
+  if (f0.visibility.fromCam && f1.visibility.fromCam)      //  Both points visible ?
   {
-    zColor    = (p0.z        + p1.z       ) >> 1 ;   //  Average world Z.
-    distColor = (p0_dist2osc + p1_dist2osc) >> 1 ;   //  Average distance 2 oscillator.
+    draw0 = f0 ;
+    draw1 = f1 ;
   }
   else                                   //  Only one of the points is visible.
   {
-    Q3  visible, invisible ;
-    Q   visible_dist2osc ;
+    Fuxel  terminator, invisible ;
 
-    if (p0_visibility.fromCam)
+    if (f0.visibility.fromCam)
     {
-      visible   = p0 ;  visible_dist2osc = p0_dist2osc ;
-      invisible = p1 ;
+      terminator = draw0 = f0 ;
+      invisible          = f1 ;
     }
     else
     {
-      s0 = s1 ;
-      visible   = p1 ;  visible_dist2osc = p1_dist2osc ;
-      invisible = p0 ;
+      terminator = draw0 = f1 ;
+      invisible          = f0 ;
     }
 
     for (int i = 0  ;  i < TERMINATOR_MAX_ITERATIONS  ;  ++i)    // TODO: replace with a while with screen point distance exit heuristic.
     {
-      Q3  half ;
-      Q   half_dist2osc ;
+      Fuxel  half ;
 
-      half.x        = (visible.x + invisible.x) >> 1 ;
-      half.y        = (visible.y + invisible.y) >> 1 ;
-      half_dist2osc = oscillator_distance( half.x, half.y ) ;
-      half.z        = f_distance( half_dist2osc ) ;
+      half.world.x            = (terminator.world.x + invisible.world.x) >> 1 ;
+      half.world.y            = (terminator.world.y + invisible.world.y) >> 1 ;
+      half.dist2osc           = oscillator_distance( half.world.x, half.world.y ) ;
+      half.world.z            = f_distance( half.dist2osc ) ;
+      half.visibility.fromCam = function_isVisible_fromPoint( half.world, viewPoint, viewPointBoxing ) ;
 
-      if (function_isVisible_fromPoint( half, viewPoint, viewPointBoxing ))
-      {
-        visible = half ;  visible_dist2osc = half_dist2osc ;
-      }
+      if (half.visibility.fromCam)
+        terminator = half ;
       else
-        invisible = half ;
+        invisible  = half ;
     }
 
-    screen_project( &s1, visible ) ;
-    zColor    = (p0.z        + visible.z       ) >> 1 ;   //  Average world Z.
-    distColor = (p0_dist2osc + visible_dist2osc) >> 1 ;   //  Average distance 2 oscillator.
+    screen_project( &terminator.screen, terminator.world ) ;
+    draw1 = terminator ;
   }
+
+  const Q zColor    = (draw0.world.z  + draw1.world.z ) >> 1 ;   //  Average world Z.
+  const Q distColor = (draw0.dist2osc + draw1.dist2osc) >> 1 ;   //  Average distance 2 oscillator.
 
 #ifdef PBL_COLOR
   set_stroke_color( gCtx, zColor, distColor ) ;
 
-  graphics_draw_line( gCtx, s0, s1 ) ;
+  graphics_draw_line( gCtx, draw0.screen, draw1.screen ) ;
 #else
   Draw2D_line_pattern( gCtx
-                     , s0.x, s0.y
-                     , s1.x, s1.y
+                     , draw0.screen.x, draw0.screen.y
+                     , draw1.screen.x, draw1.screen.y
                      , get_stroke_ink( zColor, distColor )
                      ) ;
 #endif
 }
 
 
-// x parallel line.
+// x parallel line form function point (Fuxel) f0 to f1.
 void
 grid_major_drawLineX
 ( GContext *gCtx
@@ -1406,22 +1381,22 @@ grid_major_drawLineX
     const int i1 = i + 1 ;
 
     function_draw_lineSegment( gCtx
-                             , (Q3){ .x = grid_major_x[i] << COORD_SHIFT
-                                   , .y = grid_major_yj
-                                   , .z = grid_major_z[i][j] << Z_SHIFT
-                                   }
-                             , grid_major_visibility[i][j]
-                             , grid_major_dist2osc[i][j] << DIST_SHIFT
-                             , grid_major_screen[i][j]
-
-                             , (Q3){ .x = grid_major_x[i1] << COORD_SHIFT
-                                   , .y = grid_major_yj
-                                   , .z = grid_major_z[i1][j] << Z_SHIFT
-                                   }
-                             , grid_major_visibility[i1][j]
-                             , grid_major_dist2osc[i1][j] << DIST_SHIFT
-                             , grid_major_screen[i1][j]
-
+                             , (Fuxel){ .world      = (Q3){ .x = grid_major_x[i] << COORD_SHIFT          // f0
+                                                          , .y = grid_major_yj
+                                                          , .z = grid_major_z[i][j] << Z_SHIFT
+                                                          }
+                                      , .dist2osc   = grid_major_dist2osc[i][j] << DIST_SHIFT
+                                      , .visibility = grid_major_visibility[i][j]
+                                      , .screen     = grid_major_screen[i][j]
+                                      }
+                             , (Fuxel){ .world      =  (Q3){ .x = grid_major_x[i1] << COORD_SHIFT        // f1
+                                                           , .y = grid_major_yj
+                                                           , .z = grid_major_z[i1][j] << Z_SHIFT
+                                                           }
+                                      , .dist2osc   = grid_major_dist2osc[i1][j] << DIST_SHIFT
+                                      , .visibility = grid_major_visibility[i1][j]
+                                      , .screen     = grid_major_screen[i1][j]
+                                      }
                              , s_cam.viewPoint
                              , s_cam_viewPoint_boxing
                              ) ;
@@ -1443,22 +1418,22 @@ grid_major_drawLineY
     const int j1 = j + 1 ;
 
     function_draw_lineSegment( gCtx
-                             , (Q3){ .x = grid_major_xi
-                                   , .y = grid_major_y[j] << COORD_SHIFT
-                                   , .z = grid_major_z[i][j] << Z_SHIFT
-                                   }
-                             , grid_major_visibility[i][j]
-                             , grid_major_dist2osc[i][j] << DIST_SHIFT
-                             , grid_major_screen[i][j]
-
-                             , (Q3){ .x = grid_major_xi
-                                   , .y = grid_major_y[j1] << COORD_SHIFT
-                                   , .z = grid_major_z[i][j1] << Z_SHIFT
-                                   }
-                             , grid_major_visibility[i][j1]
-                             , grid_major_dist2osc[i][j1] << DIST_SHIFT
-                             , grid_major_screen[i][j1]
-
+                             , (Fuxel){ .world      = (Q3){ .x = grid_major_xi                        // f0
+                                                          , .y = grid_major_y[j] << COORD_SHIFT
+                                                          , .z = grid_major_z[i][j] << Z_SHIFT
+                                                          }
+                                      , .visibility = grid_major_visibility[i][j]
+                                      , .dist2osc   = grid_major_dist2osc[i][j] << DIST_SHIFT
+                                      , .screen     = grid_major_screen[i][j]
+                                      }
+                             , (Fuxel){ .world      = (Q3){ .x = grid_major_xi                        // f1
+                                                          , .y = grid_major_y[j1] << COORD_SHIFT
+                                                          , .z = grid_major_z[i][j1] << Z_SHIFT
+                                                          }
+                                      , .visibility = grid_major_visibility[i][j1]
+                                      , .dist2osc   = grid_major_dist2osc[i][j1] << DIST_SHIFT
+                                      , .screen     = grid_major_screen[i][j1]
+                                      }
                              , s_cam.viewPoint
                              , s_cam_viewPoint_boxing
                              ) ;
@@ -1516,22 +1491,22 @@ grid_minor_drawLineX
     const int i1 = i + 1 ;
 
     function_draw_lineSegment( gCtx
-                             , (Q3){ .x = grid_minor_x[i] << COORD_SHIFT
-                                   , .y = grid_minor_yj
-                                   , .z = grid_minor_z[i][j] << Z_SHIFT
-                                   }
-                             , grid_minor_visibility[i][j]
-                             , grid_minor_dist2osc[i][j] << DIST_SHIFT
-                             , grid_minor_screen[i][j]
-
-                             , (Q3){ .x = grid_minor_x[i1] << COORD_SHIFT
-                                   , .y = grid_minor_yj
-                                   , .z = grid_minor_z[i1][j] << Z_SHIFT
-                                   }
-                             , grid_minor_visibility[i1][j]
-                             , grid_minor_dist2osc[i1][j] << DIST_SHIFT
-                             , grid_minor_screen[i1][j]
-
+                             , (Fuxel){ .world      = (Q3){ .x = grid_minor_x[i] << COORD_SHIFT          // f0
+                                                          , .y = grid_minor_yj
+                                                          , .z = grid_minor_z[i][j] << Z_SHIFT
+                                                          }
+                                      , .dist2osc   = grid_minor_dist2osc[i][j] << DIST_SHIFT
+                                      , .visibility = grid_minor_visibility[i][j]
+                                      , .screen     = grid_minor_screen[i][j]
+                                      }
+                             , (Fuxel){ .world      = (Q3){ .x = grid_minor_x[i1] << COORD_SHIFT         // f1
+                                                          , .y = grid_minor_yj
+                                                          , .z = grid_minor_z[i1][j] << Z_SHIFT
+                                                          }
+                                      , .dist2osc   = grid_minor_dist2osc[i1][j] << DIST_SHIFT
+                                      , .visibility = grid_minor_visibility[i1][j]
+                                      , .screen     = grid_minor_screen[i1][j]
+                                      }
                              , s_cam.viewPoint
                              , s_cam_viewPoint_boxing
                              ) ;

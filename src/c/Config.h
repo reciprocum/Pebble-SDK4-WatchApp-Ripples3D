@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 19h15 September 20 2016  GMT
+   Last revision: 09h15 September 21 2016  GMT
 */
 
 #pragma once

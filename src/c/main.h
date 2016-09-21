@@ -5,59 +5,10 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 19h15 September 20 2016  GMT
+   Last revision: 09h15 September 21 2016  GMT
 */
 
 #include "Config.h"
-
-
-/***  ---------------  COLORIZATION  ---------------  ***/
-
-typedef enum { COLORIZATION_UNDEFINED
-             , COLORIZATION_MONO
-             , COLORIZATION_SIGNAL
-             , COLORIZATION_DIST
-             }
-Colorization ;
-
-static Colorization  s_colorization = COLORIZATION_UNDEFINED ;
-
-
-/***  ---------------  PATTERN  ---------------  ***/
-
-typedef enum { PATTERN_UNDEFINED
-             , PATTERN_DOTS
-             , PATTERN_LINES
-             , PATTERN_STRIPES
-             , PATTERN_GRID
-             }
-Pattern ;
-
-static Pattern  s_pattern = PATTERN_UNDEFINED ;
-
-
-/***  ---------------  OSCILLATOR  ---------------  ***/
-
-typedef enum { OSCILLATOR_UNDEFINED
-             , OSCILLATOR_ANCHORED
-             , OSCILLATOR_FLOATING
-             , OSCILLATOR_BOUNCING
-             }
-Oscilator ;
-
-static Oscilator  s_oscillator = OSCILLATOR_UNDEFINED ;
-
-
-/***  ---------------  TRANSPARENCY  ---------------  ***/
-
-typedef enum { TRANSPARENCY_UNDEFINED
-             , TRANSPARENCY_OPAQUE
-             , TRANSPARENCY_TRANSLUCENT
-             , TRANSPARENCY_XRAY
-             }
-Transparency ;
-
-static Transparency  s_transparency = TRANSPARENCY_UNDEFINED ;
 
 
 /* -----------   Default modes   ----------- */
