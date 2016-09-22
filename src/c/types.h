@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 09h15 September 21 2016  GMT
+   Last revision: 17h55 September 22 2016  GMT
 */
 
 #include <pebble.h>
@@ -17,6 +17,7 @@ typedef enum { COLORIZATION_UNDEFINED
              , COLORIZATION_MONO
              , COLORIZATION_SIGNAL
              , COLORIZATION_DIST
+             , COLORIZATION_SHADOW
              }
 Colorization ;
 

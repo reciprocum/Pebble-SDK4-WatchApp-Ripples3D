@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 09h15 September 21 2016  GMT
+   Last revision: 17h55 September 22 2016  GMT
 */
 
 #include "Config.h"
@@ -15,36 +15,39 @@
 
 #ifdef GIF
   #define  ANTIALIASING_DEFAULT    true
-  #define  OSCILLATOR_DEFAULT      OSCILLATOR_BOUNCING
+  #define  OSCILLATOR_DEFAULT      OSCILLATOR_ANCHORED
   #define  PATTERN_DEFAULT         PATTERN_STRIPES
   #define  TRANSPARENCY_DEFAULT    TRANSPARENCY_OPAQUE
+  #define  COLORIZATION_DEFAULT    COLORIZATION_SHADOW
   #define  ANIMATION_INTERVAL_MS   200
+  
+  #define VISIBILITY_MAX_ITERATIONS   5
+  #define TERMINATOR_TOLERANCE_PXL    2
 #else
   #define  ANTIALIASING_DEFAULT    false
   #define  OSCILLATOR_DEFAULT      OSCILLATOR_ANCHORED
   #define  PATTERN_DEFAULT         PATTERN_LINES
   #define  TRANSPARENCY_DEFAULT    TRANSPARENCY_TRANSLUCENT
 
+  #ifdef PBL_COLOR
+    #define  COLORIZATION_DEFAULT     COLORIZATION_DIST
+  #else
+    #define  COLORIZATION_DEFAULT     COLORIZATION_MONO
+  #endif
+
   #ifdef EMU
     #define  ANIMATION_INTERVAL_MS    80
   #else
     #define  ANIMATION_INTERVAL_MS    50
   #endif
-#endif
 
-
-#ifdef PBL_COLOR
-  #define  COLORIZATION_DEFAULT     COLORIZATION_DIST
-#else
-  #define  COLORIZATION_DEFAULT     COLORIZATION_MONO
+  #define VISIBILITY_MAX_ITERATIONS   4
+  #define TERMINATOR_TOLERANCE_PXL    3
 #endif
 
 
 // Animation related: adds wrist movement reaction inertia to dampen accelerometer jerkiness.
 #define ACCEL_SAMPLER_CAPACITY    8
-
-#define VISIBILITY_MAX_ITERATIONS   4
-#define TERMINATOR_MAX_ITERATIONS   3
 
 
 /* -----------   GRID/CAMERA PARAMETERS   ----------- */
@@ -61,6 +64,7 @@
 #define  GRID_SCALE                 7.9999f
 
 #define  CAM3D_DISTANCEFROMORIGIN   9.75f
+#define  LIGHT_DISTANCEFROMORIGIN   5.25f
 
 
 /* -----------   PHYSICS PARAMETERS   ----------- */
