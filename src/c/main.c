@@ -795,6 +795,7 @@ static bool       s_color_isInverted ;
   }
 
 
+/*
   void
   set_stroke_color
   ( GContext    *gCtx
@@ -821,6 +822,29 @@ static bool       s_color_isInverted ;
       break ;
     } ;
   }
+*/
+
+  GColor
+  Fuxel_color
+  ( const Fuxel  f )
+  {
+    switch (s_colorization)
+    {
+      case COLORIZATION_SIGNAL:
+        return f.world.z > Q_0  ?  GColorMelon  :  GColorVividCerulean ;
+
+      case COLORIZATION_DIST:
+        return s_colorMap[(f.dist2osc >> 15) & 0b111] ;      //  (2 * distance) % 8
+
+      case COLORIZATION_SHADOW:
+        return f.visibility.fromLight1 ? s_colorMap[(f.dist2osc >> 15) & 0b111] : GColorDarkGray ;
+
+      case COLORIZATION_MONO:
+      case COLORIZATION_UNDEFINED:
+      default:
+        return s_color_stroke ;
+    } ;
+  }
 
 
   static bool   s_antialiasing = ANTIALIASING_DEFAULT ;
@@ -843,14 +867,11 @@ static bool       s_color_isInverted ;
 
 
   ink_t
-  get_stroke_ink
+  Fuxel_ink
   ( const Fuxel  f )
   {
     switch (s_colorization)
     {
-      case COLORIZATION_MONO:
-        return INK100 ;
-
       case COLORIZATION_SIGNAL:
         return  f.world.z > Q_0  ?  INK100  :  INK33 ;
 
@@ -864,12 +885,11 @@ static bool       s_color_isInverted ;
           default:
             return INK100 ;
         }
-      break ;
 
       case COLORIZATION_SHADOW:
         return f.visibility.fromLight1 ? INK100 : INK33 ;
-      break ;
 
+      case COLORIZATION_MONO:
       case COLORIZATION_UNDEFINED:
       default:
         return INK100 ;
@@ -1286,7 +1306,7 @@ function_draw_pixel
 )
 {
 #ifdef PBL_COLOR
-  set_stroke_color( gCtx, f ) ;
+  graphics_context_set_stroke_color( gCtx, Fuxel_color( f ) ) ;
 #endif
 
   graphics_draw_pixel( gCtx, f.screen ) ;
@@ -1451,11 +1471,10 @@ function_draw_line
 
   // We reach this point because either there are no terminators between f0 & f1, or the screen distance is close enough to avoid needing to find them.
   #ifdef PBL_COLOR
-    set_stroke_color( gCtx, f0 ) ;
-
+    graphics_context_set_stroke_color( gCtx, Fuxel_color( f0 ) ) ;
     graphics_draw_line( gCtx, f0.screen, f1.screen ) ;
   #else
-    Draw2D_line_pattern( gCtx, f0.screen.x, f0.screen.y, f1.screen.x, f1.screen.y, get_stroke_ink( f0 ) ) ;
+    Draw2D_line_pattern( gCtx, f0.screen.x, f0.screen.y, f1.screen.x, f1.screen.y, Fuxel_ink( f0 ) ) ;
   #endif
 }
 

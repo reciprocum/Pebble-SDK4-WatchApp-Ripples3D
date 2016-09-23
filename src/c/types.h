@@ -5,10 +5,11 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 17h55 September 22 2016  GMT
+   Last revision: 11h55 September 23 2016  GMT
 */
 
 #include <pebble.h>
+#include <karambola/Draw2D.h>
 
 
 /* -----------   ENUMS   ----------- */
@@ -69,10 +70,18 @@ typedef struct
 } Boxing ;
 
 
+union Pen
+{
+  GColor  color ;
+  ink_t   ink ;
+} ;
+
+
 typedef struct
 {
   Q3          world ;
   Q           dist2osc ;
   Visibility  visibility ;
   GPoint      screen ;
+  union Pen   pen ;
 } Fuxel ;
