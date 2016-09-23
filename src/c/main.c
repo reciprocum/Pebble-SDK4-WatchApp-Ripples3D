@@ -795,49 +795,20 @@ static bool       s_color_isInverted ;
   }
 
 
-/*
-  void
-  set_stroke_color
-  ( GContext    *gCtx
-  , const Fuxel  f
-  )
-  {
-    switch (s_colorization)
-    {
-      case COLORIZATION_SIGNAL:
-        graphics_context_set_stroke_color( gCtx, f.world.z > Q_0  ?  GColorMelon  :  GColorVividCerulean ) ;
-      break ;
-
-      case COLORIZATION_DIST:
-        graphics_context_set_stroke_color( gCtx, s_colorMap[(f.dist2osc >> 15) & 0b111] ) ;      //  (2 * distance) % 8
-      break ;
-
-      case COLORIZATION_SHADOW:
-        graphics_context_set_stroke_color( gCtx, f.visibility.fromLight1 ? s_colorMap[(f.dist2osc >> 15) & 0b111] : GColorDarkGray ) ;
-      break ;
-
-      case COLORIZATION_MONO:
-      case COLORIZATION_UNDEFINED:
-        graphics_context_set_stroke_color( gCtx, s_color_stroke ) ;
-      break ;
-    } ;
-  }
-*/
-
   GColor
   Fuxel_color
-  ( const Fuxel  f )
+  ( const Fuxel  *fPtr )
   {
     switch (s_colorization)
     {
       case COLORIZATION_SIGNAL:
-        return f.world.z > Q_0  ?  GColorMelon  :  GColorVividCerulean ;
+        return fPtr->world.z > Q_0  ?  GColorMelon  :  GColorVividCerulean ;
 
       case COLORIZATION_DIST:
-        return s_colorMap[(f.dist2osc >> 15) & 0b111] ;      //  (2 * distance) % 8
+        return s_colorMap[(fPtr->dist2osc >> 15) & 0b111] ;      //  (2 * distance) % 8
 
       case COLORIZATION_SHADOW:
-        return f.visibility.fromLight1 ? s_colorMap[(f.dist2osc >> 15) & 0b111] : GColorDarkGray ;
+        return fPtr->visibility.fromLight1 ? s_colorMap[(fPtr->dist2osc >> 15) & 0b111] : GColorDarkGray ;
 
       case COLORIZATION_MONO:
       case COLORIZATION_UNDEFINED:
@@ -868,15 +839,15 @@ static bool       s_color_isInverted ;
 
   ink_t
   Fuxel_ink
-  ( const Fuxel  f )
+  ( const Fuxel  *fPtr )
   {
     switch (s_colorization)
     {
       case COLORIZATION_SIGNAL:
-        return  f.world.z > Q_0  ?  INK100  :  INK33 ;
+        return  fPtr->world.z > Q_0  ?  INK100  :  INK33 ;
 
       case COLORIZATION_DIST:
-        switch ((f.dist2osc >> 15) & 0b1 )   //  (2 * distance) % 2
+        switch ((fPtr->dist2osc >> 15) & 0b1 )   //  (2 * distance) % 2
         {
           case 1:
             return INK33 ;
@@ -887,7 +858,7 @@ static bool       s_color_isInverted ;
         }
 
       case COLORIZATION_SHADOW:
-        return f.visibility.fromLight1 ? INK100 : INK33 ;
+        return fPtr->visibility.fromLight1 ? INK100 : INK33 ;
 
       case COLORIZATION_MONO:
       case COLORIZATION_UNDEFINED:
@@ -1306,7 +1277,7 @@ function_draw_pixel
 )
 {
 #ifdef PBL_COLOR
-  graphics_context_set_stroke_color( gCtx, Fuxel_color( f ) ) ;
+  graphics_context_set_stroke_color( gCtx, f.pen.color ) ;
 #endif
 
   graphics_draw_pixel( gCtx, f.screen ) ;
@@ -1334,7 +1305,13 @@ grid_major_drawPixel
       ;
 
       if (f.visibility.fromCam)
+      {
+        #ifdef PBL_COLOR
+          f.pen.color = Fuxel_color( &f ) ;
+        #endif
+
         function_draw_pixel( gCtx, f ) ;
+      }
     }
   }
 }
@@ -1361,7 +1338,13 @@ grid_minor_drawPixel
       ;
 
       if (f.visibility.fromCam)
+      {
+        #ifdef PBL_COLOR
+          f.pen.color = Fuxel_color( &f ) ;
+        #endif
+
         function_draw_pixel( gCtx, f ) ;
+      }
     }
   }
 }
@@ -1388,7 +1371,13 @@ grid_major_drawPixel_XRAY
       ;
 
       if (!f.visibility.fromCam)
+      {
+        #ifdef PBL_COLOR
+          f.pen.color = Fuxel_color( &f ) ;
+        #endif
+
         function_draw_pixel( gCtx, f ) ;
+      }
     }
   }
 }
@@ -1415,23 +1404,62 @@ grid_minor_drawPixel_XRAY
       ;
 
       if (!f.visibility.fromCam)
+      {
+        #ifdef PBL_COLOR
+          f.pen.color = Fuxel_color( &f ) ;
+        #endif
+
         function_draw_pixel( gCtx, f ) ;
+      }
     }
   }
 }
 
 
 bool
-Visibility_equals
-( const Visibility v1
-, const Visibility v2
+Fuxel_visualyIdentical
+( const Fuxel *f1Ptr
+, const Fuxel *f2Ptr
 )
 {
-  return (v1.fromCam    == v2.fromCam   )
-      && (v1.fromLight1 == v2.fromLight1)
-      && (v1.fromLight2 == v2.fromLight2)
-      && (v1.fromLight3 == v2.fromLight3)
+  return f1Ptr->visibility.fromCam == f2Ptr->visibility.fromCam
+  #ifdef PBL_COLOR
+      && gcolor_equal( f1Ptr->pen.color, f2Ptr->pen.color )
+  #else
+      && f1Ptr->pen.ink == f2Ptr->pen.ink
+  #endif
        ;
+
+  /*
+      && (f1Ptr->visibility.fromLight1 == f2Ptr->visibility.fromLight1)
+      && (f1Ptr->visibility.fromLight2 == f2Ptr->visibility.fromLight2)
+      && (f1Ptr->visibility.fromLight3 == f2Ptr->visibility.fromLight3)
+  */
+}
+
+
+Fuxel
+Fuxel_median
+( const Fuxel *f1Ptr
+, const Fuxel *f2Ptr
+)
+{
+  Fuxel  median ;
+    
+  median.world.x  = (f1Ptr->world.x + f2Ptr->world.x) >> 1 ;
+  median.world.y  = (f1Ptr->world.y + f2Ptr->world.y) >> 1 ;
+  median.dist2osc = oscillator_distance( median.world.x, median.world.y ) ;
+  median.world.z  = f_distance( median.dist2osc ) ;
+  Visibility_set( &median.visibility, median.world ) ;
+  screen_project( &median.screen, median.world ) ;
+
+  #ifdef PBL_COLOR
+    median.pen.color = Fuxel_color( &median ) ;
+  #else
+    median.pen.ink   = Fuxel_ink( &median ) ;
+  #endif
+
+  return median ;
 }
 
 
@@ -1442,40 +1470,32 @@ function_draw_line
 , const Fuxel  f1
 )
 {
-  if (!f0.visibility.fromCam && !f1.visibility.fromCam)    //  None of the points is visible ?
-    return ;
-
-  if (!Visibility_equals( f0.visibility, f1.visibility ))   //  Is there any cam/light terminator to find ?
+  if (f0.visibility.fromCam || f1.visibility.fromCam)    //  One of the points is visible ?
   {
-    // Calculate screen distance between f0 & f1.
-    int sdx = f0.screen.x - f1.screen.x  ;  if (sdx < 0) sdx = -sdx ;   // Abs delta screen x.
-    int sdy = f0.screen.y - f1.screen.y  ;  if (sdy < 0) sdy = -sdy ;   // Abs delta screen y.
-  
-    if ((sdx + sdy) > TERMINATOR_TOLERANCE_PXL)   // Screen distance still too far apart ?
+    if (!Fuxel_visualyIdentical( &f0, &f1 ))   //  Is there any cam/light terminator to find ?
     {
-      // Need to recursively zoom in on the cam/light terminator.
-      Fuxel  half ;
+      // Calculate screen distance between f0 & f1.
+      int sdx = f0.screen.x - f1.screen.x  ;  if (sdx < 0) sdx = -sdx ;   // Abs delta screen x.
+      int sdy = f0.screen.y - f1.screen.y  ;  if (sdy < 0) sdy = -sdy ;   // Abs delta screen y.
     
-      half.world.x  = (f0.world.x + f1.world.x) >> 1 ;
-      half.world.y  = (f0.world.y + f1.world.y) >> 1 ;
-      half.dist2osc = oscillator_distance( half.world.x, half.world.y ) ;
-      half.world.z  = f_distance( half.dist2osc ) ;
-      Visibility_set( &half.visibility, half.world ) ;
-      screen_project( &half.screen, half.world ) ;
-    
-      function_draw_line( gCtx, f0, half ) ;
-      function_draw_line( gCtx, half, f1 ) ;
-      return ;
+      if ((sdx + sdy) > TERMINATOR_TOLERANCE_PXL)   // Screen distance still too far apart ?
+      {
+        // Need to recursively zoom in on the visual terminator.
+        Fuxel  half = Fuxel_median( &f0, &f1 ) ;
+        function_draw_line( gCtx, f0, half ) ;
+        function_draw_line( gCtx, half, f1 ) ;
+        return ;
+      }
     }
+  
+    // We reach this point because either there are no terminators between f0 & f1, or the screen distance is close enough to avoid needing to find them.
+    #ifdef PBL_COLOR
+      graphics_context_set_stroke_color( gCtx, f0.pen.color ) ;
+      graphics_draw_line( gCtx, f0.screen, f1.screen ) ;
+    #else
+      Draw2D_line_pattern( gCtx, f0.screen.x, f0.screen.y, f1.screen.x, f1.screen.y, f0.pen.ink ) ;
+    #endif
   }
-
-  // We reach this point because either there are no terminators between f0 & f1, or the screen distance is close enough to avoid needing to find them.
-  #ifdef PBL_COLOR
-    graphics_context_set_stroke_color( gCtx, Fuxel_color( f0 ) ) ;
-    graphics_draw_line( gCtx, f0.screen, f1.screen ) ;
-  #else
-    Draw2D_line_pattern( gCtx, f0.screen.x, f0.screen.y, f1.screen.x, f1.screen.y, Fuxel_ink( f0 ) ) ;
-  #endif
 }
 
 
@@ -1499,6 +1519,12 @@ grid_major_drawLineX
               }
   ;
 
+  #ifdef PBL_COLOR
+    f1.pen.color = Fuxel_color( &f1 ) ;
+  #else
+    f1.pen.ink   = Fuxel_ink( &f1 ) ;
+  #endif
+
   for (int i = 1  ;  i < GRID_LINES ;  ++i)
   {
     f0 = f1 ;
@@ -1513,7 +1539,19 @@ grid_major_drawLineX
                 }
     ;
 
-    function_draw_line( gCtx, f0, f1 ) ;
+    #ifdef PBL_COLOR
+      f1.pen.color = Fuxel_color( &f1 ) ;
+    #else
+      f1.pen.ink   = Fuxel_ink( &f1 ) ;
+    #endif
+
+    #ifdef GIF
+      Fuxel  half = Fuxel_median( &f0, &f1 ) ;
+      function_draw_line( gCtx, f0, half ) ;
+      function_draw_line( gCtx, half, f1 ) ;
+    #else
+      function_draw_line( gCtx, f0, f1 ) ;
+    #endif
   }
 }
 
@@ -1538,6 +1576,12 @@ grid_major_drawLineY
               }
   ;
 
+  #ifdef PBL_COLOR
+    f1.pen.color = Fuxel_color( &f1 ) ;
+  #else
+    f1.pen.ink   = Fuxel_ink( &f1 ) ;
+  #endif
+
   for (int j = 1  ;  j < GRID_LINES ;  ++j)
   {
     f0 = f1 ;
@@ -1552,7 +1596,19 @@ grid_major_drawLineY
                 }
     ;
 
-    function_draw_line( gCtx, f0, f1 ) ;
+    #ifdef PBL_COLOR
+      f1.pen.color = Fuxel_color( &f1 ) ;
+    #else
+      f1.pen.ink   = Fuxel_ink( &f1 ) ;
+    #endif
+
+    #ifdef GIF
+      Fuxel  half = Fuxel_median( &f0, &f1 ) ;
+      function_draw_line( gCtx, f0, half ) ;
+      function_draw_line( gCtx, half, f1 ) ;
+    #else
+      function_draw_line( gCtx, f0, f1 ) ;
+    #endif
   }
 }
 
@@ -1613,6 +1669,12 @@ grid_minor_drawLineX
               }
   ;
 
+  #ifdef PBL_COLOR
+    f1.pen.color = Fuxel_color( &f1 ) ;
+  #else
+    f1.pen.ink   = Fuxel_ink( &f1 ) ;
+  #endif
+
   for (int i = 1  ;  i < GRID_LINES-1 ;  ++i)
   {
     f0 = f1 ;
@@ -1627,7 +1689,19 @@ grid_minor_drawLineX
                 }
     ;
 
-    function_draw_line( gCtx, f0, f1 ) ;
+    #ifdef PBL_COLOR
+      f1.pen.color = Fuxel_color( &f1 ) ;
+    #else
+      f1.pen.ink   = Fuxel_ink( &f1 ) ;
+    #endif
+
+    #ifdef GIF
+      Fuxel  half = Fuxel_median( &f0, &f1 ) ;
+      function_draw_line( gCtx, f0, half ) ;
+      function_draw_line( gCtx, half, f1 ) ;
+    #else
+      function_draw_line( gCtx, f0, f1 ) ;
+    #endif
   }
 }
 
