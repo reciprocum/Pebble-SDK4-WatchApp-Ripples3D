@@ -4,7 +4,6 @@
    Author  : Afonso Santos, Portugal
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
-
    Last revision: 11h55 September 23 2016  GMT
 */
 
@@ -13,15 +12,6 @@
 
 
 /* -----------   ENUMS   ----------- */
-
-typedef enum { COLORIZATION_UNDEFINED
-             , COLORIZATION_MONO
-             , COLORIZATION_SIGNAL
-             , COLORIZATION_DIST
-             , COLORIZATION_SHADOW
-             }
-Colorization ;
-
 
 typedef enum { PATTERN_UNDEFINED
              , PATTERN_DOTS
@@ -32,20 +22,35 @@ typedef enum { PATTERN_UNDEFINED
 Pattern ;
 
 
+typedef enum { TRANSPARENCY_UNDEFINED
+             , TRANSPARENCY_TRANSLUCENT
+             , TRANSPARENCY_XRAY
+             , TRANSPARENCY_OPAQUE
+             }
+Transparency ;
+
+
 typedef enum { OSCILLATOR_UNDEFINED
              , OSCILLATOR_ANCHORED
              , OSCILLATOR_FLOATING
              , OSCILLATOR_BOUNCING
              }
-Oscilator ;
+Oscillator ;
 
 
-typedef enum { TRANSPARENCY_UNDEFINED
-             , TRANSPARENCY_OPAQUE
-             , TRANSPARENCY_TRANSLUCENT
-             , TRANSPARENCY_XRAY
+typedef enum { COLORIZATION_UNDEFINED
+             , COLORIZATION_MONO
+             , COLORIZATION_SIGNAL
+             , COLORIZATION_DIST
              }
-Transparency ;
+Colorization ;
+
+
+typedef enum { ILLUMINATION_UNDEFINED
+             , ILLUMINATION_DIFUSE
+             , ILLUMINATION_SHADOW
+             }
+Illumination ;
 
 
 /* -----------   STRUCTS   ----------- */

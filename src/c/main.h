@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 17h55 September 22 2016  GMT
+   Last revision: 10h55 September 25 2016  GMT
 */
 
 #include "Config.h"
@@ -15,12 +15,13 @@
 
 #ifdef GIF
   #define  ANTIALIASING_DEFAULT    true
-  #define  OSCILLATOR_DEFAULT      OSCILLATOR_ANCHORED
+  #define  OSCILLATOR_DEFAULT      OSCILLATOR_BOUNCING
   #define  PATTERN_DEFAULT         PATTERN_STRIPES
   #define  TRANSPARENCY_DEFAULT    TRANSPARENCY_OPAQUE
   #define  COLORIZATION_DEFAULT    COLORIZATION_DIST
-  #define  ANIMATION_INTERVAL_MS   200
-  
+  #define  ILLUMINATION_DEFAULT    ILLUMINATION_SHADOW
+  #define  ANIMATION_INTERVAL_MS   250
+
   #define VISIBILITY_MAX_ITERATIONS   5
   #define TERMINATOR_TOLERANCE_PXL    2
 #else
@@ -34,6 +35,8 @@
   #else
     #define  COLORIZATION_DEFAULT     COLORIZATION_MONO
   #endif
+
+  #define  ILLUMINATION_DEFAULT     ILLUMINATION_DIFUSE
 
   #ifdef EMU
     #define  ANIMATION_INTERVAL_MS    80
@@ -52,11 +55,10 @@
 
 /* -----------   GRID/CAMERA PARAMETERS   ----------- */
 
-#ifdef PBL_COLOR
-  #define  GRID_LINES     27
+#ifdef PBL_PLATFORM_APLITE
+  #define  GRID_LINES     23
 #else
-  // Any more lines and APLITE will crash.
-  #define  GRID_LINES     25
+  #define  GRID_LINES     27
 #endif
 
 // The GRID_SCALE value bellow has been precison engineered as to saturate x,y grid coord tables in signed Q3.12 format (int16_t),

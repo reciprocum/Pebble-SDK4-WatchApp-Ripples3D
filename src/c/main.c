@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 17h55 September 22 2016  GMT
+   Last revision: 13h15 September 25 2016  GMT
 */
 
 #include <pebble.h>
@@ -20,6 +20,8 @@
 #include "types.h"
 
 
+/* -----------   GLOBAL VARS   ----------- */
+
 // UI related
 static Window         *s_window ;
 static Layer          *s_window_layer ;
@@ -27,15 +29,16 @@ static Layer          *s_world_layer ;
 static ActionBarLayer *s_action_bar_layer ;
 
 // World related
-const  Q             grid_scale     = Q_from_float(GRID_SCALE) ;
-const  Q             grid_halfScale = Q_from_float(GRID_SCALE) >> 1 ;   //  scale / 2
+const  Q    grid_scale     = Q_from_float(GRID_SCALE) ;
+const  Q    grid_halfScale = Q_from_float(GRID_SCALE) >> 1 ;   //  scale / 2
 
-static Colorization  s_colorization = COLORIZATION_UNDEFINED ;
-static Pattern       s_pattern      = PATTERN_UNDEFINED ;
-static Oscilator     s_oscillator   = OSCILLATOR_UNDEFINED ;
-static Transparency  s_transparency = TRANSPARENCY_UNDEFINED ;
+static Pattern       s_pattern       = PATTERN_UNDEFINED ;
+static Transparency  s_transparency  = TRANSPARENCY_UNDEFINED ;
+static Oscillator    s_oscillator    = OSCILLATOR_UNDEFINED ;
+static Colorization  s_colorization  = COLORIZATION_UNDEFINED ;
+static Illumination  s_illumination  = ILLUMINATION_UNDEFINED ;
 
-static Q             world_xMin, world_xMax, world_yMin, world_yMax, world_zMin, world_zMax ;
+static Q    world_xMin, world_xMax, world_yMin, world_yMax, world_zMin, world_zMax ;
 
 
 Boxing
@@ -84,8 +87,8 @@ static AppTimer  *s_world_updateTimer_ptr   = NULL ;
 /***  ---------------  Prototypes  ---------------  ***/
 
 void grid_dist2osc_update( ) ;
-Q2*  position_setFromSensors( Q2 *positionPtr ) ;
-Q2*  acceleration_setFromSensors( Q2 *accelerationPtr ) ;
+void position_setFromSensors( Q2 *positionPtr ) ;
+void acceleration_setFromSensors( Q2 *accelerationPtr ) ;
 
 void
 cam_config
@@ -97,59 +100,6 @@ cam_config
 void grid_minor_dist2osc_update( ) ;
 void grid_minor_z_update( ) ;
 void grid_minor_visibility_update( ) ;
-
-
-/***  ---------------  COLORIZATION  ---------------  ***/
-
-void
-colorization_set
-( Colorization colorization )
-{
-  if (s_colorization == colorization)
-    return ;
-
-  s_colorization = colorization ;
-}
-
-
-void
-colorization_change
-( )
-{
-  // Cycle trough the color modes.
-  switch (s_colorization)
-  {
-    case COLORIZATION_MONO:
-      colorization_set( COLORIZATION_SIGNAL ) ;
-    break ;
-
-    case COLORIZATION_SIGNAL:
-      colorization_set( COLORIZATION_DIST ) ;
-    break ;
-
-    case COLORIZATION_DIST:
-      colorization_set( COLORIZATION_SHADOW ) ;
-    break ;
-
-    case COLORIZATION_SHADOW:
-      colorization_set( COLORIZATION_MONO ) ;
-    break ;
-
-    case COLORIZATION_UNDEFINED:
-      colorization_set( COLORIZATION_DEFAULT ) ;
-    break ;
-  } ;
-
-  layer_mark_dirty( s_world_layer ) ;
-}
-
-
-void
-colorization_change_click_handler
-( ClickRecognizerRef recognizer
-, void              *context
-)
-{ colorization_change( ) ; }
 
 
 /***  ---------------  PATTERN  ---------------  ***/
@@ -170,8 +120,10 @@ pattern_set
       grid_minor_visibility_update( ) ;
     break ;
 
-    default:
-      break ;
+    case PATTERN_LINES:
+    case PATTERN_GRID:
+    case PATTERN_UNDEFINED:
+    break ;
   }
 }
 
@@ -226,11 +178,6 @@ transparency_set
 
   switch (s_transparency = pTransparency)
   {
-    case TRANSPARENCY_OPAQUE:
-    case TRANSPARENCY_XRAY:
-  // To be updated elsewere.
-    break ;
-
     case TRANSPARENCY_TRANSLUCENT:
       // Set all major to true.
       for (int i = 0  ;  i < GRID_LINES  ;  ++i)
@@ -241,6 +188,11 @@ transparency_set
       for (int i = 0  ;  i < GRID_LINES-1  ;  ++i)
         for (int j = 0  ;  j < GRID_LINES-1  ;  ++j)
           grid_minor_visibility[i][j].fromCam = true ;
+    break ;
+
+    case TRANSPARENCY_XRAY:
+    case TRANSPARENCY_OPAQUE:
+    // To be updated elsewere.
     break ;
 
     case TRANSPARENCY_UNDEFINED:
@@ -256,16 +208,16 @@ transparency_change
   // Cycle trough the transparency modes.
   switch (s_transparency)
   {
-    case TRANSPARENCY_OPAQUE:
+    case TRANSPARENCY_TRANSLUCENT:
       transparency_set( TRANSPARENCY_XRAY ) ;
     break ;
 
     case TRANSPARENCY_XRAY:
-      transparency_set( TRANSPARENCY_TRANSLUCENT ) ;
+      transparency_set( TRANSPARENCY_OPAQUE ) ;
     break ;
 
-    case TRANSPARENCY_TRANSLUCENT:
-      transparency_set( TRANSPARENCY_OPAQUE ) ;
+    case TRANSPARENCY_OPAQUE:
+      transparency_set( TRANSPARENCY_TRANSLUCENT ) ;
     break ;
 
     case TRANSPARENCY_UNDEFINED:
@@ -285,12 +237,106 @@ transparency_change_click_handler
 { transparency_change( ) ; }
 
 
+/***  ---------------  COLORIZATION  ---------------  ***/
+
+void
+colorization_set
+( Colorization colorization )
+{
+  if (s_colorization == colorization)
+    return ;
+
+  s_colorization = colorization ;
+}
+
+
+void
+colorization_change
+( )
+{
+  // Cycle trough the color modes.
+  switch (s_colorization)
+  {
+    case COLORIZATION_MONO:
+      colorization_set( COLORIZATION_SIGNAL ) ;
+    break ;
+
+    case COLORIZATION_SIGNAL:
+      colorization_set( COLORIZATION_DIST ) ;
+    break ;
+
+    case COLORIZATION_DIST:
+      colorization_set( COLORIZATION_MONO ) ;
+    break ;
+
+    case COLORIZATION_UNDEFINED:
+      colorization_set( COLORIZATION_DEFAULT ) ;
+    break ;
+  } ;
+
+  layer_mark_dirty( s_world_layer ) ;
+}
+
+
+void
+colorization_change_click_handler
+( ClickRecognizerRef recognizer
+, void              *context
+)
+{ colorization_change( ) ; }
+
+
+/***  ---------------  ILUMINATION  ---------------  ***/
+
+void
+illumination_set
+( Illumination ilumination )
+{
+  if (s_illumination == ilumination)
+    return ;
+
+  s_illumination = ilumination ;
+}
+
+
+void
+illumination_change
+( )
+{
+  // Cycle trough the ilumination modes.
+  switch (s_illumination)
+  {
+    case ILLUMINATION_DIFUSE:
+      illumination_set( ILLUMINATION_SHADOW ) ;
+    break ;
+
+    case ILLUMINATION_SHADOW:
+      illumination_set( ILLUMINATION_DIFUSE ) ;
+    break ;
+
+    case ILLUMINATION_UNDEFINED:
+      illumination_set( ILLUMINATION_DEFAULT ) ;
+    break ;
+  } ;
+
+  layer_mark_dirty( s_world_layer ) ;
+}
+
+
+void
+illumination_change_click_handler
+( ClickRecognizerRef recognizer
+, void              *context
+)
+{ illumination_change( ) ; }
+
+
 /***  ---------------  Camera related  ---------------  ***/
 
 static CamQ3   s_cam ;
 static Q3      s_cam_viewPoint ;
 static Boxing  s_cam_viewPoint_boxing ;
-static Q       s_cam_zoom        = PBL_IF_RECT_ELSE(Q_from_float(+1.25f), Q_from_float(+1.15f)) ;
+static Q       s_cam_zoom           = PBL_IF_RECT_ELSE(Q_from_float(+1.25f), Q_from_float(+1.05f)) ;
 static int32_t s_cam_rotZangle      = 0
              , s_cam_rotXangle      = 0
              , s_cam_rotZangleSpeed = 0
@@ -317,8 +363,8 @@ cam_initialize
       #endif
     break ;
 
-    case OSCILLATOR_BOUNCING:
     case OSCILLATOR_FLOATING:
+    case OSCILLATOR_BOUNCING:
     case OSCILLATOR_UNDEFINED:
       s_cam_rotZangleSpeed = s_cam_rotXangleSpeed = 0 ;
     break ;
@@ -381,8 +427,8 @@ light_initialize
       s_light_rotZangleSpeed = 0 ;
     break ;
 
-    case OSCILLATOR_BOUNCING:
     case OSCILLATOR_FLOATING:
+    case OSCILLATOR_BOUNCING:
     case OSCILLATOR_UNDEFINED:
       s_light_rotZangleSpeed = TRIG_MAX_ANGLE >> 9 ;   //  2 * PI / 512
     break ;
@@ -411,17 +457,23 @@ screen_project
 }
 
 
-/***  ---------------  OSCILLATOR MODE  ---------------  ***/
+/***  ---------------  OSCILLATOR  ---------------  ***/
 
 void
-oscillatorMode_set
-( Oscilator pOscilator )
+oscillator_set
+( Oscillator oscilator )
 {
-  if (s_oscillator == pOscilator)
+  if (s_oscillator == oscilator)
     return ;
 
-  switch (s_oscillator = pOscilator)
+  switch (s_oscillator = oscilator)
   {
+    case OSCILLATOR_ANCHORED:
+    case OSCILLATOR_UNDEFINED:
+      s_cam_rotZangle = s_cam_rotXangle = 0 ;
+      oscillator_position = Q2_origin ;   //  oscillator_position := Q2_origin
+    break ;
+
     case OSCILLATOR_FLOATING:
       Q3_set( &s_cam_viewPoint, Q_from_float( +0.1f ), Q_from_float( -1.0f ), Q_from_float( +0.7f ) ) ;
       cam_config( s_cam_viewPoint, s_cam_rotZangle = 0, s_cam_rotXangle = 0 ) ;
@@ -439,12 +491,6 @@ oscillatorMode_set
         oscillator_speed = Q2_origin ;   //  No initial speed.
       #endif
     break ;
-
-    case OSCILLATOR_ANCHORED:
-    case OSCILLATOR_UNDEFINED:
-      s_cam_rotZangle = s_cam_rotXangle = 0 ;
-      oscillator_position = Q2_origin ;   //  oscillator_position := Q2_origin
-    break ;
   } ;
 
   grid_dist2osc_update( ) ;
@@ -452,37 +498,37 @@ oscillatorMode_set
 
 
 void
-oscillatorMode_change
+oscillator_change
 ( )
 {
   // Cycle trough the oscillator modes.
   switch (s_oscillator)
   {
     case OSCILLATOR_ANCHORED:
-      oscillatorMode_set( OSCILLATOR_FLOATING ) ;
+      oscillator_set( OSCILLATOR_FLOATING ) ;
     break ;
 
     case OSCILLATOR_FLOATING:
-      oscillatorMode_set( OSCILLATOR_BOUNCING ) ;
+      oscillator_set( OSCILLATOR_BOUNCING ) ;
     break ;
 
     case OSCILLATOR_BOUNCING:
-      oscillatorMode_set( OSCILLATOR_ANCHORED ) ;
+      oscillator_set( OSCILLATOR_ANCHORED ) ;
     break ;
 
     case OSCILLATOR_UNDEFINED:
-      oscillatorMode_set( OSCILLATOR_DEFAULT ) ;
+      oscillator_set( OSCILLATOR_DEFAULT ) ;
     break ;
   }
 }
 
 
 void
-oscillatorMode_change_click_handler
+oscillator_change_click_handler
 ( ClickRecognizerRef recognizer
 , void              *context
 )
-{ oscillatorMode_change( ) ; }
+{ oscillator_change( ) ; }
 
 
 /***  ---------------  z := f( x, y )  ---------------  ***/
@@ -799,22 +845,37 @@ static bool       s_color_isInverted ;
   Fuxel_color
   ( const Fuxel  *fPtr )
   {
+    GColor color = GColorBlack ;
+
     switch (s_colorization)
     {
-      case COLORIZATION_SIGNAL:
-        return fPtr->world.z > Q_0  ?  GColorMelon  :  GColorVividCerulean ;
-
-      case COLORIZATION_DIST:
-        return s_colorMap[(fPtr->dist2osc >> 15) & 0b111] ;      //  (2 * distance) % 8
-
-      case COLORIZATION_SHADOW:
-        return fPtr->visibility.fromLight1 ? s_colorMap[(fPtr->dist2osc >> 15) & 0b111] : GColorDarkGray ;
-
       case COLORIZATION_MONO:
       case COLORIZATION_UNDEFINED:
-      default:
-        return s_color_stroke ;
-    } ;
+        color = s_color_stroke ;
+      break ;
+
+      case COLORIZATION_SIGNAL:
+        color = fPtr->world.z > Q_0  ?  GColorMelon  :  GColorVividCerulean ;
+      break ;
+
+      case COLORIZATION_DIST:
+        color = s_colorMap[(fPtr->dist2osc >> 15) & 0b111] ;      //  (2 * distance) % 8
+      break ;
+    }
+
+    switch (s_illumination)
+    {
+      case ILLUMINATION_UNDEFINED:
+        return GColorBlack ;
+
+      case ILLUMINATION_DIFUSE:
+        return color ;
+
+      case ILLUMINATION_SHADOW:
+        return fPtr->visibility.fromLight1 ? color : GColorDarkGray ;
+    }
+
+    return color ;   //  Will never reach this line, just to mute compiler error.
   }
 
 
@@ -841,30 +902,37 @@ static bool       s_color_isInverted ;
   Fuxel_ink
   ( const Fuxel  *fPtr )
   {
+    ink_t ink = INK0 ;
+
     switch (s_colorization)
     {
-      case COLORIZATION_SIGNAL:
-        return  fPtr->world.z > Q_0  ?  INK100  :  INK33 ;
-
-      case COLORIZATION_DIST:
-        switch ((fPtr->dist2osc >> 15) & 0b1 )   //  (2 * distance) % 2
-        {
-          case 1:
-            return INK33 ;
-
-          case 0:
-          default:
-            return INK100 ;
-        }
-
-      case COLORIZATION_SHADOW:
-        return fPtr->visibility.fromLight1 ? INK100 : INK33 ;
-
       case COLORIZATION_MONO:
       case COLORIZATION_UNDEFINED:
-      default:
-        return INK100 ;
-    } ;
+        ink = INK100 ;
+      break ;
+
+      case COLORIZATION_SIGNAL:
+        ink = fPtr->world.z > Q_0  ?  INK100  :  INK50 ;
+      break ;
+
+      case COLORIZATION_DIST:
+        ink = ((fPtr->dist2osc >> 15) & 0b1) ? INK50 : INK100 ;
+      break ;
+    }
+
+    switch (s_illumination)
+    {
+      case ILLUMINATION_UNDEFINED:
+        return INK0 ;
+
+      case ILLUMINATION_DIFUSE:
+        return ink ;
+
+      case ILLUMINATION_SHADOW:
+        return fPtr->visibility.fromLight1 ? ink : INK33 ;
+    }
+
+    return ink ;   //  Will never reach this line, just to mute compiler error.
   }
 
 
@@ -908,7 +976,8 @@ world_initialize
   color_initialize( ) ;
 
   colorization_set( COLORIZATION_DEFAULT ) ;
-  oscillatorMode_set( OSCILLATOR_DEFAULT ) ;
+  illumination_set( ILLUMINATION_DEFAULT ) ;
+  oscillator_set  ( OSCILLATOR_DEFAULT   ) ;
   transparency_set( TRANSPARENCY_DEFAULT ) ;
 
 #ifndef GIF
@@ -952,8 +1021,8 @@ grid_z_update
     case PATTERN_STRIPES:
       grid_minor_z_update( ) ;
 
-    case PATTERN_GRID:
     case PATTERN_LINES:
+    case PATTERN_GRID:
       grid_major_z_update( ) ;
     break ;
 
@@ -971,7 +1040,7 @@ Visibility_set
 {
   visibilityPtr->fromCam = function_isVisible_fromPoint( world, s_cam.viewPoint, s_cam_viewPoint_boxing ) ;
 
-  if (visibilityPtr->fromCam  &&  s_colorization == COLORIZATION_SHADOW)
+  if (visibilityPtr->fromCam  &&  s_illumination == ILLUMINATION_SHADOW)
     visibilityPtr->fromLight1 = function_isVisible_fromPoint( world, s_light, s_light_boxing ) ;
   else
     visibilityPtr->fromLight1 = false ;
@@ -987,8 +1056,15 @@ grid_major_visibility_update
 {
   switch (s_transparency)
   {
-    case TRANSPARENCY_OPAQUE:
+    case TRANSPARENCY_UNDEFINED:
+    break ;
+
+    case TRANSPARENCY_TRANSLUCENT:
+      // Already set to true in transparency_set( )
+    break ;
+
     case TRANSPARENCY_XRAY:
+    case TRANSPARENCY_OPAQUE:
       for (int i = 0  ;  i < GRID_LINES  ;  ++i)
       {
         const Q  grid_major_x_i = grid_major_x[i] << COORD_SHIFT ;
@@ -1004,14 +1080,6 @@ grid_major_visibility_update
         }
       }
     break ;
-
-    case TRANSPARENCY_TRANSLUCENT:
-      // Already set to true in transparency_set( )
-    break ;
-
-    case TRANSPARENCY_UNDEFINED:
-      // Already set to false in transparency_set( )
-    break ;
   }
 }
 
@@ -1022,8 +1090,15 @@ grid_minor_visibility_update
 {
   switch (s_transparency)
   {
-    case TRANSPARENCY_OPAQUE:
+    case TRANSPARENCY_UNDEFINED:
+    break ;
+
+    case TRANSPARENCY_TRANSLUCENT:
+      // Already set to true in transparency_set( )
+    break ;
+
     case TRANSPARENCY_XRAY:
+    case TRANSPARENCY_OPAQUE:
       for (int i = 0  ;  i < GRID_LINES-1  ;  ++i)
       {
         const Q  grid_minor_x_i = grid_minor_x[i] << COORD_SHIFT ;
@@ -1039,14 +1114,6 @@ grid_minor_visibility_update
         }
       }
     break ;
-
-    case TRANSPARENCY_TRANSLUCENT:
-      // Already set to true in transparency_set( )
-    break ;
-
-    case TRANSPARENCY_UNDEFINED:
-      // Already set to false in transparency_set( )
-    break ;
   }
 }
 
@@ -1061,8 +1128,8 @@ grid_visibility_update
     case PATTERN_STRIPES:
       grid_minor_visibility_update( ) ;
 
-    case PATTERN_GRID:
     case PATTERN_LINES:
+    case PATTERN_GRID:
       grid_major_visibility_update( ) ;
     break ;
 
@@ -1072,7 +1139,7 @@ grid_visibility_update
 }
 
 
-Q2*
+void
 position_setFromSensors
 ( Q2 *positionPtr )
 {
@@ -1085,12 +1152,10 @@ position_setFromSensors
     positionPtr->x = Q_mul( grid_halfScale, ad.x << 6 ) ;
     positionPtr->y = Q_mul( grid_halfScale, ad.y << 6 ) ;
   }
-
-  return positionPtr ;
 }
 
 
-Q2*
+void
 acceleration_setFromSensors
 ( Q2 *accelerationPtr )
 {
@@ -1103,8 +1168,57 @@ acceleration_setFromSensors
     accelerationPtr->x = ad.x >> OSCILLATOR_INERTIA_LEVEL ;
     accelerationPtr->y = ad.y >> OSCILLATOR_INERTIA_LEVEL ;
   }
+}
 
-  return accelerationPtr ;
+
+void
+viewPoint_setFromSensors
+( Q3 *viewPointPtr )
+{
+  #ifdef GIF
+    // Fixed point view for GIF generation.
+    Q3_set( viewPointPtr, Q_from_float( -0.1f ), Q_from_float( +1.0f ), Q_from_float( +0.7f ) ) ;
+  #else
+    {
+      // Non GIF => Interactive: use acelerometer to affect camera's view point position.
+      AccelData ad ;
+  
+      if (accel_service_peek( &ad ) < 0)         // Accel service not available.
+      {
+        Sampler_push( accelSampler_x,  -81 ) ;   // STEADY viewPoint attractor.
+        Sampler_push( accelSampler_y, -816 ) ;   // STEADY viewPoint attractor.
+        Sampler_push( accelSampler_z, -571 ) ;   // STEADY viewPoint attractor.
+      }
+      else
+      {
+        #ifdef EMU
+          if (ad.x == 0  &&  ad.y == 0  &&  ad.z == -1000)   // Under EMU with SENSORS off this is the default output.
+          {
+            Sampler_push( accelSampler_x,  -81 ) ;
+            Sampler_push( accelSampler_y, -816 ) ;
+            Sampler_push( accelSampler_z, -571 ) ;
+          }
+          else                                               // If running under EMU the SENSOR feed must be ON.
+          {
+            Sampler_push( accelSampler_x, ad.x ) ;
+            Sampler_push( accelSampler_y, ad.y ) ;
+            Sampler_push( accelSampler_z, ad.z ) ;
+          }
+        #else
+          Sampler_push( accelSampler_x, ad.x ) ;
+          Sampler_push( accelSampler_y, ad.y ) ;
+          Sampler_push( accelSampler_z, ad.z ) ;
+        #endif
+      }
+
+      const float kAvg = 0.001f / accelSampler_x->samplesNum ;
+      const float avgX = (float)(kAvg * accelSampler_x->samplesAcum ) ;
+      const float avgY =-(float)(kAvg * accelSampler_y->samplesAcum ) ;
+      const float avgZ =-(float)(kAvg * accelSampler_z->samplesAcum ) ;
+
+      Q3_set( viewPointPtr, Q_from_float( avgX ), Q_from_float( avgY ), Q_from_float( avgZ ) ) ;
+    }
+  #endif
 }
 
 
@@ -1116,68 +1230,16 @@ camera_update
 {
   switch (s_oscillator)
   {
-    case OSCILLATOR_ANCHORED:
-      #ifdef GIF
-        // Fixed point view for GIF generation.
-        Q3_set( &s_cam_viewPoint, Q_from_float( -0.1f ), Q_from_float( +1.0f ), Q_from_float( +0.7f ) ) ;
-      #else
-      {
-        // Non GIF => Interactive: use acelerometer to affect camera's view point position.
-        AccelData ad ;
-
-        if (accel_service_peek( &ad ) < 0)         // Accel service not available.
-        {
-          Sampler_push( accelSampler_x,  -81 ) ;   // STEADY viewPoint attractor.
-          Sampler_push( accelSampler_y, -816 ) ;   // STEADY viewPoint attractor.
-          Sampler_push( accelSampler_z, -571 ) ;   // STEADY viewPoint attractor.
-        }
-        else
-        {
-          #ifdef EMU
-            if (ad.x == 0  &&  ad.y == 0  &&  ad.z == -1000)   // Under EMU with SENSORS off this is the default output.
-            {
-              Sampler_push( accelSampler_x,  -81 ) ;
-              Sampler_push( accelSampler_y, -816 ) ;
-              Sampler_push( accelSampler_z, -571 ) ;
-            }
-            else                                               // If running under EMU the SENSOR feed must be ON.
-            {
-              Sampler_push( accelSampler_x, ad.x ) ;
-              Sampler_push( accelSampler_y, ad.y ) ;
-              Sampler_push( accelSampler_z, ad.z ) ;
-            }
-          #else
-            Sampler_push( accelSampler_x, ad.x ) ;
-            Sampler_push( accelSampler_y, ad.y ) ;
-            Sampler_push( accelSampler_z, ad.z ) ;
-          #endif
-        }
-
-        const float kAvg = 0.001f / accelSampler_x->samplesNum ;
-        const float avgX = (float)(kAvg * accelSampler_x->samplesAcum ) ;
-        const float avgY =-(float)(kAvg * accelSampler_y->samplesAcum ) ;
-        const float avgZ =-(float)(kAvg * accelSampler_z->samplesAcum ) ;
-
-        Q3_set( &s_cam_viewPoint, Q_from_float( avgX ), Q_from_float( avgY ), Q_from_float( avgZ ) ) ;
-      }
-      #endif
-
-      s_cam_rotZangle += s_cam_rotZangleSpeed ;  s_cam_rotZangle &= 0xFFFF ;        // Keep angle normalized.
-      s_cam_rotXangle += s_cam_rotXangleSpeed ;  s_cam_rotXangle &= 0xFFFF ;        // Keep angle normalized.
-
-      cam_config( s_cam_viewPoint, s_cam_rotZangle, s_cam_rotXangle ) ;
-    break ;
-
+    case OSCILLATOR_UNDEFINED:
     case OSCILLATOR_FLOATING:
     case OSCILLATOR_BOUNCING:
-      #ifdef GIF
-        s_cam_rotZangle += s_cam_rotZangleSpeed ;  s_cam_rotZangle &= 0xFFFF ;        // Keep angle normalized.
-        s_cam_rotXangle += s_cam_rotXangleSpeed ;  s_cam_rotXangle &= 0xFFFF ;        // Keep angle normalized.
-        cam_config( s_cam_viewPoint, s_cam_rotZangle, s_cam_rotXangle ) ;
-      #endif
     break ;
 
-    case OSCILLATOR_UNDEFINED:
+    case OSCILLATOR_ANCHORED:
+      viewPoint_setFromSensors( &s_cam_viewPoint ) ;
+      s_cam_rotZangle += s_cam_rotZangleSpeed ;  s_cam_rotZangle &= 0xFFFF ;        // Keep angle normalized.
+      s_cam_rotXangle += s_cam_rotXangleSpeed ;  s_cam_rotXangle &= 0xFFFF ;        // Keep angle normalized.
+      cam_config( s_cam_viewPoint, s_cam_rotZangle, s_cam_rotXangle ) ;
     break ;
   }
 }
@@ -1490,10 +1552,10 @@ function_draw_line
   
     // We reach this point because either there are no terminators between f0 & f1, or the screen distance is close enough to avoid needing to find them.
     #ifdef PBL_COLOR
-      graphics_context_set_stroke_color( gCtx, f0.pen.color ) ;
+      graphics_context_set_stroke_color( gCtx, f0.visibility.fromCam ? f0.pen.color : f1.pen.color ) ;
       graphics_draw_line( gCtx, f0.screen, f1.screen ) ;
     #else
-      Draw2D_line_pattern( gCtx, f0.screen.x, f0.screen.y, f1.screen.x, f1.screen.y, f0.pen.ink ) ;
+      Draw2D_line_pattern( gCtx, f0.screen.x, f0.screen.y, f1.screen.x, f1.screen.y, f0.visibility.fromCam ? f0.pen.ink : f1.pen.ink ) ;
     #endif
   }
 }
@@ -1740,6 +1802,9 @@ grid_screen_project
 {
   switch (s_pattern)
   {
+    case PATTERN_UNDEFINED:
+    break ;
+
     case PATTERN_DOTS:
     case PATTERN_STRIPES:
       grid_minor_screen_project( ) ;
@@ -1747,9 +1812,6 @@ grid_screen_project
     case PATTERN_LINES:
     case PATTERN_GRID:
       grid_major_screen_project( ) ;
-    break ;
-
-    case PATTERN_UNDEFINED:
     break ;
   }
 }
@@ -1776,6 +1838,9 @@ world_draw
   // Draw the calculated screen points.
   switch (s_pattern)
   {
+    case PATTERN_UNDEFINED:
+    break ;
+
     case PATTERN_DOTS:
       if (s_transparency == TRANSPARENCY_XRAY)
       {
@@ -1825,9 +1890,6 @@ world_draw
 
       grid_major_drawLinesX( gCtx ) ;
       grid_major_drawLinesY( gCtx ) ;
-    break ;
-
-    case PATTERN_UNDEFINED:
     break ;
   }
 }
@@ -1895,7 +1957,7 @@ click_config_provider
 {
   // Single click.
   window_single_click_subscribe( BUTTON_ID_UP
-                               , (ClickHandler) colorization_change_click_handler
+                               , (ClickHandler) colorization_change_click_handler  
                                ) ;
 
   window_single_click_subscribe( BUTTON_ID_SELECT
@@ -1904,7 +1966,7 @@ click_config_provider
 
 #ifndef GIF
   window_single_click_subscribe( BUTTON_ID_DOWN
-                               , (ClickHandler) oscillatorMode_change_click_handler
+                               , (ClickHandler) oscillator_change_click_handler
                                ) ;
 #else
   window_single_click_subscribe( BUTTON_ID_DOWN
@@ -1913,6 +1975,12 @@ click_config_provider
 #endif
 
   // Long click.
+  window_long_click_subscribe( BUTTON_ID_UP
+                             , 0
+                             , (ClickHandler) illumination_change_click_handler
+                             , NULL
+                             ) ;
+
   window_long_click_subscribe( BUTTON_ID_SELECT
                              , 0
                              , (ClickHandler) transparency_change_click_handler
