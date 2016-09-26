@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 10h55 September 25 2016  GMT
+   Last revision: 12h15 September 26 2016  GMT
 */
 
 #include "Config.h"
@@ -15,11 +15,11 @@
 
 #ifdef GIF
   #define  ANTIALIASING_DEFAULT    true
-  #define  OSCILLATOR_DEFAULT      OSCILLATOR_BOUNCING
+  #define  OSCILLATOR_DEFAULT      OSCILLATOR_ANCHORED
   #define  PATTERN_DEFAULT         PATTERN_STRIPES
   #define  TRANSPARENCY_DEFAULT    TRANSPARENCY_OPAQUE
   #define  COLORIZATION_DEFAULT    COLORIZATION_DIST
-  #define  ILLUMINATION_DEFAULT    ILLUMINATION_SHADOW
+  #define  ILLUMINATION_DEFAULT    ILLUMINATION_SPOTLIGHTS
   #define  ANIMATION_INTERVAL_MS   250
 
   #define VISIBILITY_MAX_ITERATIONS   5

@@ -4,7 +4,8 @@
    Author  : Afonso Santos, Portugal
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
-   Last revision: 11h55 September 23 2016  GMT
+
+   Last revision: 12h15 September 26 2016  GMT
 */
 
 #include <pebble.h>
@@ -49,6 +50,7 @@ Colorization ;
 typedef enum { ILLUMINATION_UNDEFINED
              , ILLUMINATION_DIFUSE
              , ILLUMINATION_SHADOW
+             , ILLUMINATION_SPOTLIGHTS
              }
 Illumination ;
 

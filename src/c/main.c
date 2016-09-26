@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 13h15 September 25 2016  GMT
+   Last revision: 12h15 September 26 2016  GMT
 */
 
 #include <pebble.h>
@@ -61,19 +61,19 @@ world_boxing( Q3 p )
 #define Z_SHIFT      9
 #define DIST_SHIFT   4
 
-static int16_t    grid_major_x         [GRID_LINES] ;                   // S3.12  Coords [-7.999,+7.999]
-static int16_t    grid_major_y         [GRID_LINES] ;                   // S3.12  Coords [-7.999,+7.999]
-static int8_t     grid_major_z         [GRID_LINES][GRID_LINES] ;       // S0.7   f(x,y) [-0.99, +0.99]
-static uint16_t   grid_major_dist2osc  [GRID_LINES][GRID_LINES] ;       // U4.12  Need integer part up to 11.3137 because of max diagonal distance for bouncing oscillator.
+static int16_t          grid_major_x         [GRID_LINES] ;                   // S3.12  Coords [-7.999,+7.999]
+static int16_t          grid_major_y         [GRID_LINES] ;                   // S3.12  Coords [-7.999,+7.999]
+static int8_t           grid_major_z         [GRID_LINES][GRID_LINES] ;       // S0.7   f(x,y) [-0.99, +0.99]
+static uint16_t         grid_major_dist2osc  [GRID_LINES][GRID_LINES] ;       // U4.12  Need integer part up to 11.3137 because of max diagonal distance for bouncing oscillator.
 static union Visibility grid_major_visibility[GRID_LINES][GRID_LINES] ;
-static GPoint     grid_major_screen    [GRID_LINES][GRID_LINES] ;
+static GPoint           grid_major_screen    [GRID_LINES][GRID_LINES] ;
 
-static int16_t    grid_minor_x         [GRID_LINES-1] ;                 // S3.12  Coords [-7.999,+7.999]
-static int16_t    grid_minor_y         [GRID_LINES-1] ;                 // S3.12  Coords [-7.999,+7.999]
-static int8_t     grid_minor_z         [GRID_LINES-1][GRID_LINES-1] ;   // S0.7   f(x,y) [-0.99, +0.99]
-static uint16_t   grid_minor_dist2osc  [GRID_LINES-1][GRID_LINES-1] ;   // U4.12  Need integer part up to sqrt(2) * GRID_SCALE because of max diagonal distance for bouncing oscillator.
+static int16_t          grid_minor_x         [GRID_LINES-1] ;                 // S3.12  Coords [-7.999,+7.999]
+static int16_t          grid_minor_y         [GRID_LINES-1] ;                 // S3.12  Coords [-7.999,+7.999]
+static int8_t           grid_minor_z         [GRID_LINES-1][GRID_LINES-1] ;   // S0.7   f(x,y) [-0.99, +0.99]
+static uint16_t         grid_minor_dist2osc  [GRID_LINES-1][GRID_LINES-1] ;   // U4.12  Need integer part up to sqrt(2) * GRID_SCALE because of max diagonal distance for bouncing oscillator.
 static union Visibility grid_minor_visibility[GRID_LINES-1][GRID_LINES-1] ;
-static GPoint     grid_minor_screen    [GRID_LINES-1][GRID_LINES-1] ;
+static GPoint           grid_minor_screen    [GRID_LINES-1][GRID_LINES-1] ;
 
 static int32_t oscillator_anglePhase ;
 static Q2      oscillator_position ;
@@ -306,18 +306,22 @@ illumination_change
   // Cycle trough the ilumination modes.
   switch (s_illumination)
   {
+    case ILLUMINATION_UNDEFINED:
+      illumination_set( ILLUMINATION_DEFAULT ) ;
+    break ;
+
     case ILLUMINATION_DIFUSE:
       illumination_set( ILLUMINATION_SHADOW ) ;
     break ;
 
     case ILLUMINATION_SHADOW:
-      illumination_set( ILLUMINATION_DIFUSE ) ;
+      illumination_set( ILLUMINATION_SPOTLIGHTS ) ;
     break ;
 
-    case ILLUMINATION_UNDEFINED:
-      illumination_set( ILLUMINATION_DEFAULT ) ;
+    case ILLUMINATION_SPOTLIGHTS:
+      illumination_set( ILLUMINATION_DIFUSE ) ;
     break ;
-  } ;
+  }
 
   layer_mark_dirty( s_world_layer ) ;
 }
@@ -355,12 +359,15 @@ cam_initialize
   {
     case OSCILLATOR_ANCHORED:
       s_cam_rotZangleSpeed = TRIG_MAX_ANGLE >> 9 ;   //  2 * PI / 512
+      s_cam_rotXangleSpeed = 0 ;
 
+/*
       #ifdef GIF
         s_cam_rotXangleSpeed = TRIG_MAX_ANGLE >> 11 ;
       #else
         s_cam_rotXangleSpeed = 0 ;
       #endif
+*/
     break ;
 
     case OSCILLATOR_FLOATING:
@@ -404,37 +411,27 @@ cam_config
 
 /***  ---------------  Lights related  ---------------  ***/
 
-static Q3      s_light ;
-static Boxing  s_light_boxing ;
-static int32_t s_light_rotZangle      = 0
-             , s_light_rotZangleSpeed = 0
-             ;
+static Q3      s_light1       , s_light2       , s_light3 ;
+static Boxing  s_light1_boxing, s_light2_boxing, s_light3_boxing ;
 
 
 void
 light_initialize
 ( )
 {
-  Q3_set( &s_light, Q_from_float( +0.5f ), Q_from_float( -0.25f ), Q_from_float( +0.375f ) ) ;
-  Q3_scaTo( &s_light, Q_from_float(LIGHT_DISTANCEFROMORIGIN), &s_light ) ;
+  Q3_set( &s_light1, Q_from_float( +0.5f ), Q_from_float( -0.25f ), Q_from_float( +0.375f ) ) ;
+  Q3_scaTo( &s_light1, Q_from_float(LIGHT_DISTANCEFROMORIGIN), &s_light1 ) ;
 
-  // Initialize cam rotation vars.
-  s_light_rotZangle = 0 ;
+  // Initialize light rotation vars.
+  int32_t light2_rotZangle = TRIG_MAX_ANGLE / 3 ;
+  int32_t light3_rotZangle = light2_rotZangle << 1 ;
 
-  switch (s_oscillator)
-  {
-    case OSCILLATOR_ANCHORED:
-      s_light_rotZangleSpeed = 0 ;
-    break ;
+  Q3_rotZ( &s_light2, &s_light1, light2_rotZangle ) ;
+  Q3_rotZ( &s_light3, &s_light1, light3_rotZangle ) ;
 
-    case OSCILLATOR_FLOATING:
-    case OSCILLATOR_BOUNCING:
-    case OSCILLATOR_UNDEFINED:
-      s_light_rotZangleSpeed = TRIG_MAX_ANGLE >> 9 ;   //  2 * PI / 512
-    break ;
-  }
-
-  s_light_boxing = world_boxing( s_light ) ;
+  s_light1_boxing = world_boxing( s_light1 ) ;
+  s_light2_boxing = world_boxing( s_light2 ) ;
+  s_light3_boxing = world_boxing( s_light3 ) ;
 }
 
 
@@ -873,6 +870,15 @@ static bool       s_color_isInverted ;
 
       case ILLUMINATION_SHADOW:
         return fPtr->visibility.from.light1 ? color : GColorDarkGray ;
+
+      case ILLUMINATION_SPOTLIGHTS:
+        if ((fPtr->visibility.value & 0b1110) == 0b0000)   //  Not illuminated by any of the spotlights.
+          return GColorDarkGray ;
+
+        color.r = fPtr->visibility.from.light1 ? 3 : 0 ;
+        color.g = fPtr->visibility.from.light2 ? 3 : 0 ;
+        color.b = fPtr->visibility.from.light3 ? 3 : 0 ;
+        return color ;
     }
 
     return color ;   //  Will never reach this line, just to mute compiler error.
@@ -930,6 +936,27 @@ static bool       s_color_isInverted ;
 
       case ILLUMINATION_SHADOW:
         return fPtr->visibility.from.light1 ? ink : INK33 ;
+
+      case ILLUMINATION_SPOTLIGHTS:
+        switch ((fPtr->visibility.value & 0b1110) >> 1)
+        {
+          case 0b000:   // Zero lights
+            return INK20;
+
+          case 0b001:   // One light
+          case 0b010:
+          case 0b100:
+            return INK33 ;
+
+          case 0b011:   // Two lights
+          case 0b101:
+          case 0b110:
+            return INK50 ;
+
+          case 0b111:   /// Three lights
+            return INK100 ;
+        }
+      break ;
     }
 
     return ink ;   //  Will never reach this line, just to mute compiler error.
@@ -1040,13 +1067,34 @@ Visibility_set
 {
   visibilityPtr->from.cam = function_isVisible_fromPoint( world, s_cam.viewPoint, s_cam_viewPoint_boxing ) ;
 
+  if (visibilityPtr->from.cam)
+    switch (s_illumination)
+    {
+      case ILLUMINATION_UNDEFINED:
+      case ILLUMINATION_DIFUSE:
+        visibilityPtr->from.light1 = visibilityPtr->from.light2 = visibilityPtr->from.light3 = false ;
+      break ;
+
+      case ILLUMINATION_SHADOW:
+        visibilityPtr->from.light1 = function_isVisible_fromPoint( world, s_light1, s_light1_boxing ) ;
+        visibilityPtr->from.light2 = visibilityPtr->from.light3 = false ;
+      break ;
+
+      case ILLUMINATION_SPOTLIGHTS:
+        visibilityPtr->from.light1 = function_isVisible_fromPoint( world, s_light1, s_light1_boxing ) ;
+        visibilityPtr->from.light2 = function_isVisible_fromPoint( world, s_light2, s_light2_boxing ) ;
+        visibilityPtr->from.light3 = function_isVisible_fromPoint( world, s_light3, s_light3_boxing ) ;
+      break ;
+    }
+  else
+    visibilityPtr->from.light1 = visibilityPtr->from.light2 = visibilityPtr->from.light3 = false ;
+
+/*
   if (visibilityPtr->from.cam  &&  s_illumination == ILLUMINATION_SHADOW)
-    visibilityPtr->from.light1 = function_isVisible_fromPoint( world, s_light, s_light_boxing ) ;
+    visibilityPtr->from.light1 = function_isVisible_fromPoint( world, s_light1, s_light1_boxing ) ;
   else
     visibilityPtr->from.light1 = false ;
-
-  visibilityPtr->from.light2 = false ;
-  visibilityPtr->from.light3 = false ;
+*/
 }
 
 
@@ -1268,7 +1316,6 @@ oscillator_update
         acceleration_setFromSensors( &oscillator_acceleration ) ;
   
         //  2) update oscillator speed with oscillator acceleration
-        // TODO: prevent acceleration to act when position is "on the ropes".
         Q2_add( &oscillator_speed, &oscillator_speed, &oscillator_acceleration ) ;   //  oscillator_speed += oscillator_acceleration
       #endif
 
