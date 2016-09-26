@@ -55,13 +55,17 @@ Illumination ;
 
 /* -----------   STRUCTS   ----------- */
 
-typedef struct
+union Visibility
 {
-  bool fromCam   :1 ;
-  bool fromLight1:1 ;
-  bool fromLight2:1 ;
-  bool fromLight3:1 ;
-} Visibility ;
+  struct
+  {
+    bool cam   :1 ;
+    bool light1:1 ;
+    bool light2:1 ;
+    bool light3:1 ;
+  }         from ;
+  uint8_t   value ;
+} ;
 
 
 typedef struct
@@ -84,9 +88,9 @@ union Pen
 
 typedef struct
 {
-  Q3          world ;
-  Q           dist2osc ;
-  Visibility  visibility ;
-  GPoint      screen ;
-  union Pen   pen ;
+  Q3                world ;
+  Q                 dist2osc ;
+  union Visibility  visibility ;
+  GPoint            screen ;
+  union Pen         pen ;
 } Fuxel ;
