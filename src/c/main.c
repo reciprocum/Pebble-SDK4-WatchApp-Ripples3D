@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 12h15 September 26 2016  GMT
+   Last revision: 13h45 September 27 2016  GMT
 */
 
 #include <pebble.h>
@@ -61,19 +61,19 @@ world_boxing( Q3 p )
 #define Z_SHIFT      9
 #define DIST_SHIFT   4
 
-static int16_t          grid_major_x         [GRID_LINES] ;                   // S3.12  Coords [-7.999,+7.999]
-static int16_t          grid_major_y         [GRID_LINES] ;                   // S3.12  Coords [-7.999,+7.999]
-static int8_t           grid_major_z         [GRID_LINES][GRID_LINES] ;       // S0.7   f(x,y) [-0.99, +0.99]
-static uint16_t         grid_major_dist2osc  [GRID_LINES][GRID_LINES] ;       // U4.12  Need integer part up to 11.3137 because of max diagonal distance for bouncing oscillator.
-static union Visibility grid_major_visibility[GRID_LINES][GRID_LINES] ;
-static GPoint           grid_major_screen    [GRID_LINES][GRID_LINES] ;
+static int16_t     grid_major_x         [GRID_LINES] ;                   // S3.12  Coords [-7.999,+7.999]
+static int16_t     grid_major_y         [GRID_LINES] ;                   // S3.12  Coords [-7.999,+7.999]
+static int8_t      grid_major_z         [GRID_LINES][GRID_LINES] ;       // S0.7   f(x,y) [-0.99, +0.99]
+static uint16_t    grid_major_dist2osc  [GRID_LINES][GRID_LINES] ;       // U4.12  Need integer part up to 11.3137 because of max diagonal distance for bouncing oscillator.
+static Visibility  grid_major_visibility[GRID_LINES][GRID_LINES] ;
+static GPoint      grid_major_screen    [GRID_LINES][GRID_LINES] ;
 
-static int16_t          grid_minor_x         [GRID_LINES-1] ;                 // S3.12  Coords [-7.999,+7.999]
-static int16_t          grid_minor_y         [GRID_LINES-1] ;                 // S3.12  Coords [-7.999,+7.999]
-static int8_t           grid_minor_z         [GRID_LINES-1][GRID_LINES-1] ;   // S0.7   f(x,y) [-0.99, +0.99]
-static uint16_t         grid_minor_dist2osc  [GRID_LINES-1][GRID_LINES-1] ;   // U4.12  Need integer part up to sqrt(2) * GRID_SCALE because of max diagonal distance for bouncing oscillator.
-static union Visibility grid_minor_visibility[GRID_LINES-1][GRID_LINES-1] ;
-static GPoint           grid_minor_screen    [GRID_LINES-1][GRID_LINES-1] ;
+static int16_t     grid_minor_x         [GRID_LINES-1] ;                 // S3.12  Coords [-7.999,+7.999]
+static int16_t     grid_minor_y         [GRID_LINES-1] ;                 // S3.12  Coords [-7.999,+7.999]
+static int8_t      grid_minor_z         [GRID_LINES-1][GRID_LINES-1] ;   // S0.7   f(x,y) [-0.99, +0.99]
+static uint16_t    grid_minor_dist2osc  [GRID_LINES-1][GRID_LINES-1] ;   // U4.12  Need integer part up to sqrt(2) * GRID_SCALE because of max diagonal distance for bouncing oscillator.
+static Visibility  grid_minor_visibility[GRID_LINES-1][GRID_LINES-1] ;
+static GPoint      grid_minor_screen    [GRID_LINES-1][GRID_LINES-1] ;
 
 static int32_t oscillator_anglePhase ;
 static Q2      oscillator_position ;
@@ -182,12 +182,12 @@ transparency_set
       // Set all major to true.
       for (int i = 0  ;  i < GRID_LINES  ;  ++i)
         for (int j = 0  ;  j < GRID_LINES  ;  ++j)
-          grid_major_visibility[i][j].from.cam = true ;
+          grid_major_visibility[i][j].cam = true ;
 
       // Set all minor to true.
       for (int i = 0  ;  i < GRID_LINES-1  ;  ++i)
         for (int j = 0  ;  j < GRID_LINES-1  ;  ++j)
-          grid_minor_visibility[i][j].from.cam = true ;
+          grid_minor_visibility[i][j].cam = true ;
     break ;
 
     case TRANSPARENCY_XRAY:
@@ -257,16 +257,12 @@ colorization_change
   // Cycle trough the color modes.
   switch (s_colorization)
   {
-    case COLORIZATION_MONO:
-      colorization_set( COLORIZATION_SIGNAL ) ;
+    case COLORIZATION_MONOCHROMATIC:
+      colorization_set( COLORIZATION_DISTANCE ) ;
     break ;
 
-    case COLORIZATION_SIGNAL:
-      colorization_set( COLORIZATION_DIST ) ;
-    break ;
-
-    case COLORIZATION_DIST:
-      colorization_set( COLORIZATION_MONO ) ;
+    case COLORIZATION_DISTANCE:
+      colorization_set( COLORIZATION_MONOCHROMATIC ) ;
     break ;
 
     case COLORIZATION_UNDEFINED:
@@ -311,14 +307,10 @@ illumination_change
     break ;
 
     case ILLUMINATION_DIFUSE:
-      illumination_set( ILLUMINATION_SHADOW ) ;
+      illumination_set( ILLUMINATION_SPOTLIGHT ) ;
     break ;
 
-    case ILLUMINATION_SHADOW:
-      illumination_set( ILLUMINATION_SPOTLIGHTS ) ;
-    break ;
-
-    case ILLUMINATION_SPOTLIGHTS:
+    case ILLUMINATION_SPOTLIGHT:
       illumination_set( ILLUMINATION_DIFUSE ) ;
     break ;
   }
@@ -409,29 +401,19 @@ cam_config
 }
 
 
-/***  ---------------  Lights related  ---------------  ***/
+/***  ---------------  Illumination related  ---------------  ***/
 
-static Q3      s_light1       , s_light2       , s_light3 ;
-static Boxing  s_light1_boxing, s_light2_boxing, s_light3_boxing ;
+static Q3      s_spotlight        ;
+static Boxing  s_spotlight_boxing ;
 
 
 void
 light_initialize
 ( )
 {
-  Q3_set( &s_light1, Q_from_float( +0.5f ), Q_from_float( -0.25f ), Q_from_float( +0.375f ) ) ;
-  Q3_scaTo( &s_light1, Q_from_float(LIGHT_DISTANCEFROMORIGIN), &s_light1 ) ;
-
-  // Initialize light rotation vars.
-  int32_t light2_rotZangle = TRIG_MAX_ANGLE / 3 ;
-  int32_t light3_rotZangle = light2_rotZangle << 1 ;
-
-  Q3_rotZ( &s_light2, &s_light1, light2_rotZangle ) ;
-  Q3_rotZ( &s_light3, &s_light1, light3_rotZangle ) ;
-
-  s_light1_boxing = world_boxing( s_light1 ) ;
-  s_light2_boxing = world_boxing( s_light2 ) ;
-  s_light3_boxing = world_boxing( s_light3 ) ;
+  Q3_set( &s_spotlight, Q_from_float( +0.5f ), Q_from_float( -0.25f ), Q_from_float( +0.375f ) ) ;
+  Q3_scaTo( &s_spotlight, Q_from_float(LIGHT_DISTANCEFROMORIGIN), &s_spotlight ) ;
+  s_spotlight_boxing = world_boxing( s_spotlight ) ;
 }
 
 
@@ -842,20 +824,19 @@ static bool       s_color_isInverted ;
   Fuxel_color
   ( const Fuxel  *fPtr )
   {
-    GColor color = GColorBlack ;
+    GColor color = s_color_background ;
 
     switch (s_colorization)
     {
-      case COLORIZATION_MONO:
       case COLORIZATION_UNDEFINED:
+        color = s_color_background ;
+      break ;
+
+      case COLORIZATION_MONOCHROMATIC:
         color = s_color_stroke ;
       break ;
 
-      case COLORIZATION_SIGNAL:
-        color = fPtr->world.z > Q_0  ?  GColorMelon  :  GColorVividCerulean ;
-      break ;
-
-      case COLORIZATION_DIST:
+      case COLORIZATION_DISTANCE:
         color = s_colorMap[(fPtr->dist2osc >> 15) & 0b111] ;      //  (2 * distance) % 8
       break ;
     }
@@ -863,22 +844,13 @@ static bool       s_color_isInverted ;
     switch (s_illumination)
     {
       case ILLUMINATION_UNDEFINED:
-        return GColorBlack ;
+        return s_color_background ;
 
       case ILLUMINATION_DIFUSE:
         return color ;
 
-      case ILLUMINATION_SHADOW:
-        return fPtr->visibility.from.light1 ? color : GColorDarkGray ;
-
-      case ILLUMINATION_SPOTLIGHTS:
-        if ((fPtr->visibility.value & 0b1110) == 0b0000)   //  Not illuminated by any of the spotlights.
-          return GColorDarkGray ;
-
-        color.r = fPtr->visibility.from.light1 ? 3 : 0 ;
-        color.g = fPtr->visibility.from.light2 ? 3 : 0 ;
-        color.b = fPtr->visibility.from.light3 ? 3 : 0 ;
-        return color ;
+      case ILLUMINATION_SPOTLIGHT:
+        return fPtr->visibility.spotlight ? color : GColorDarkGray ;
     }
 
     return color ;   //  Will never reach this line, just to mute compiler error.
@@ -912,16 +884,12 @@ static bool       s_color_isInverted ;
 
     switch (s_colorization)
     {
-      case COLORIZATION_MONO:
+      case COLORIZATION_MONOCHROMATIC:
       case COLORIZATION_UNDEFINED:
         ink = INK100 ;
       break ;
 
-      case COLORIZATION_SIGNAL:
-        ink = fPtr->world.z > Q_0  ?  INK100  :  INK50 ;
-      break ;
-
-      case COLORIZATION_DIST:
+      case COLORIZATION_DISTANCE:
         ink = ((fPtr->dist2osc >> 15) & 0b1) ? INK50 : INK100 ;
       break ;
     }
@@ -934,29 +902,8 @@ static bool       s_color_isInverted ;
       case ILLUMINATION_DIFUSE:
         return ink ;
 
-      case ILLUMINATION_SHADOW:
-        return fPtr->visibility.from.light1 ? ink : INK33 ;
-
-      case ILLUMINATION_SPOTLIGHTS:
-        switch ((fPtr->visibility.value & 0b1110) >> 1)
-        {
-          case 0b000:   // Zero lights
-            return INK20;
-
-          case 0b001:   // One light
-          case 0b010:
-          case 0b100:
-            return INK33 ;
-
-          case 0b011:   // Two lights
-          case 0b101:
-          case 0b110:
-            return INK50 ;
-
-          case 0b111:   /// Three lights
-            return INK100 ;
-        }
-      break ;
+      case ILLUMINATION_SPOTLIGHT:
+        return fPtr->visibility.spotlight ? ink : INK33 ;
     }
 
     return ink ;   //  Will never reach this line, just to mute compiler error.
@@ -1061,40 +1008,26 @@ grid_z_update
 
 void
 Visibility_set
-( union Visibility *visibilityPtr
-, Q3                world
+( Visibility *visibilityPtr
+, Q3          world
 )
 {
-  visibilityPtr->from.cam = function_isVisible_fromPoint( world, s_cam.viewPoint, s_cam_viewPoint_boxing ) ;
+  visibilityPtr->cam = function_isVisible_fromPoint( world, s_cam.viewPoint, s_cam_viewPoint_boxing ) ;
 
-  if (visibilityPtr->from.cam)
+  if (visibilityPtr->cam)
     switch (s_illumination)
     {
       case ILLUMINATION_UNDEFINED:
       case ILLUMINATION_DIFUSE:
-        visibilityPtr->from.light1 = visibilityPtr->from.light2 = visibilityPtr->from.light3 = false ;
+        visibilityPtr->spotlight = false ;
       break ;
 
-      case ILLUMINATION_SHADOW:
-        visibilityPtr->from.light1 = function_isVisible_fromPoint( world, s_light1, s_light1_boxing ) ;
-        visibilityPtr->from.light2 = visibilityPtr->from.light3 = false ;
-      break ;
-
-      case ILLUMINATION_SPOTLIGHTS:
-        visibilityPtr->from.light1 = function_isVisible_fromPoint( world, s_light1, s_light1_boxing ) ;
-        visibilityPtr->from.light2 = function_isVisible_fromPoint( world, s_light2, s_light2_boxing ) ;
-        visibilityPtr->from.light3 = function_isVisible_fromPoint( world, s_light3, s_light3_boxing ) ;
+      case ILLUMINATION_SPOTLIGHT:
+        visibilityPtr->spotlight = function_isVisible_fromPoint( world, s_spotlight, s_spotlight_boxing ) ;
       break ;
     }
   else
-    visibilityPtr->from.light1 = visibilityPtr->from.light2 = visibilityPtr->from.light3 = false ;
-
-/*
-  if (visibilityPtr->from.cam  &&  s_illumination == ILLUMINATION_SHADOW)
-    visibilityPtr->from.light1 = function_isVisible_fromPoint( world, s_light1, s_light1_boxing ) ;
-  else
-    visibilityPtr->from.light1 = false ;
-*/
+    visibilityPtr->spotlight = false ;
 }
 
 
@@ -1413,7 +1346,7 @@ grid_major_drawPixel
                        }
       ;
 
-      if (f.visibility.from.cam)
+      if (f.visibility.cam)
       {
         #ifdef PBL_COLOR
           f.pen.color = Fuxel_color( &f ) ;
@@ -1446,7 +1379,7 @@ grid_minor_drawPixel
                        }
       ;
 
-      if (f.visibility.from.cam)
+      if (f.visibility.cam)
       {
         #ifdef PBL_COLOR
           f.pen.color = Fuxel_color( &f ) ;
@@ -1479,7 +1412,7 @@ grid_major_drawPixel_XRAY
                        }
       ;
 
-      if (!f.visibility.from.cam)
+      if (!f.visibility.cam)
       {
         #ifdef PBL_COLOR
           f.pen.color = Fuxel_color( &f ) ;
@@ -1512,7 +1445,7 @@ grid_minor_drawPixel_XRAY
                        }
       ;
 
-      if (!f.visibility.from.cam)
+      if (!f.visibility.cam)
       {
         #ifdef PBL_COLOR
           f.pen.color = Fuxel_color( &f ) ;
@@ -1531,19 +1464,13 @@ Fuxel_visualyIdentical
 , const Fuxel *f2Ptr
 )
 {
-  return f1Ptr->visibility.from.cam == f2Ptr->visibility.from.cam
+  return f1Ptr->visibility.cam == f2Ptr->visibility.cam
   #ifdef PBL_COLOR
       && gcolor_equal( f1Ptr->pen.color, f2Ptr->pen.color )
   #else
       && f1Ptr->pen.ink == f2Ptr->pen.ink
   #endif
        ;
-
-  /*
-      && (f1Ptr->visibility.fromLight1 == f2Ptr->visibility.fromLight1)
-      && (f1Ptr->visibility.fromLight2 == f2Ptr->visibility.fromLight2)
-      && (f1Ptr->visibility.fromLight3 == f2Ptr->visibility.fromLight3)
-  */
 }
 
 
@@ -1579,9 +1506,9 @@ function_draw_line
 , const Fuxel  f1
 )
 {
-  if (f0.visibility.from.cam || f1.visibility.from.cam)    //  One of the points is visible ?
+  if (f0.visibility.cam || f1.visibility.cam)    //  One of the points is visible ?
   {
-    if (!Fuxel_visualyIdentical( &f0, &f1 ))   //  Is there any cam/light terminator to find ?
+    if (!Fuxel_visualyIdentical( &f0, &f1 ))   //  Is there any cam/spotlight terminator to find ?
     {
       // Calculate screen distance between f0 & f1.
       int sdx = f0.screen.x - f1.screen.x  ;  if (sdx < 0) sdx = -sdx ;   // Abs delta screen x.
@@ -1599,10 +1526,10 @@ function_draw_line
   
     // We reach this point because either there are no terminators between f0 & f1, or the screen distance is close enough to avoid needing to find them.
     #ifdef PBL_COLOR
-      graphics_context_set_stroke_color( gCtx, f0.visibility.from.cam ? f0.pen.color : f1.pen.color ) ;
+      graphics_context_set_stroke_color( gCtx, f0.visibility.cam ? f0.pen.color : f1.pen.color ) ;
       graphics_draw_line( gCtx, f0.screen, f1.screen ) ;
     #else
-      Draw2D_line_pattern( gCtx, f0.screen.x, f0.screen.y, f1.screen.x, f1.screen.y, f0.visibility.from.cam ? f0.pen.ink : f1.pen.ink ) ;
+      Draw2D_line_pattern( gCtx, f0.screen.x, f0.screen.y, f1.screen.x, f1.screen.y, f0.visibility.cam ? f0.pen.ink : f1.pen.ink ) ;
     #endif
   }
 }

@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 12h15 September 26 2016  GMT
+   Last revision: 13h15 September 27 2016  GMT
 */
 
 #include <pebble.h>
@@ -40,34 +40,26 @@ Oscillator ;
 
 
 typedef enum { COLORIZATION_UNDEFINED
-             , COLORIZATION_MONO
-             , COLORIZATION_SIGNAL
-             , COLORIZATION_DIST
+             , COLORIZATION_MONOCHROMATIC
+             , COLORIZATION_DISTANCE
              }
 Colorization ;
 
 
 typedef enum { ILLUMINATION_UNDEFINED
              , ILLUMINATION_DIFUSE
-             , ILLUMINATION_SHADOW
-             , ILLUMINATION_SPOTLIGHTS
+             , ILLUMINATION_SPOTLIGHT
              }
 Illumination ;
 
 
 /* -----------   STRUCTS   ----------- */
 
-union Visibility
+typedef struct
 {
-  struct
-  {
-    bool cam   :1 ;
-    bool light1:1 ;
-    bool light2:1 ;
-    bool light3:1 ;
-  }         from ;
-  uint8_t   value ;
-} ;
+  bool cam      :1 ;
+  bool spotlight:1 ;
+} Visibility ;
 
 
 typedef struct
@@ -90,9 +82,9 @@ union Pen
 
 typedef struct
 {
-  Q3                world ;
-  Q                 dist2osc ;
-  union Visibility  visibility ;
-  GPoint            screen ;
-  union Pen         pen ;
+  Q3          world ;
+  Q           dist2osc ;
+  Visibility  visibility ;
+  GPoint      screen ;
+  union Pen   pen ;
 } Fuxel ;

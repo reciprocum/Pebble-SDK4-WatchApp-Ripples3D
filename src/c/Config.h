@@ -5,17 +5,17 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 12h15 September 26 2016  GMT
+   Last revision: 13h45 September 27 2016  GMT
 */
 
 #pragma once
 
 // Uncommenting the next line will enable all LOG* calls.
-#define LOG
+//#define LOG
 
 // Uncommenting the next line will enable GIF mode.
-#define  GIF
-#define  GIF_STOP_COUNT     272
+//#define  GIF
+//#define  GIF_STOP_COUNT     2720
 
 // Commenting the next line will enable fast distro settings
 //#define EMU
