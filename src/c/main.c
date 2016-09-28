@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 13h45 September 27 2016  GMT
+   Last revision: 21h45 September 28 2016  GMT
 */
 
 #include <pebble.h>
@@ -37,6 +37,7 @@ static Transparency  s_transparency  = TRANSPARENCY_UNDEFINED ;
 static Oscillator    s_oscillator    = OSCILLATOR_UNDEFINED ;
 static Colorization  s_colorization  = COLORIZATION_UNDEFINED ;
 static Illumination  s_illumination  = ILLUMINATION_UNDEFINED ;
+static Detail        s_detail        = DETAIL_UNDEFINED ;
 
 static Q    world_xMin, world_xMax, world_yMin, world_yMax, world_zMin, world_zMax ;
 
@@ -286,12 +287,12 @@ colorization_change_click_handler
 
 void
 illumination_set
-( Illumination ilumination )
+( Illumination illumination )
 {
-  if (s_illumination == ilumination)
+  if (s_illumination == illumination)
     return ;
 
-  s_illumination = ilumination ;
+  s_illumination = illumination ;
 }
 
 
@@ -327,16 +328,61 @@ illumination_change_click_handler
 { illumination_change( ) ; }
 
 
+/***  ---------------  DETAIL  ---------------  ***/
+
+void
+detail_set
+( Detail detail )
+{
+  if (s_detail == detail)
+    return ;
+
+  s_detail = detail ;
+}
+
+
+void
+detail_change
+( )
+{
+  // Cycle trough the detail modes.
+  switch (s_detail)
+  {
+    case DETAIL_UNDEFINED:
+      detail_set( DETAIL_DEFAULT ) ;
+    break ;
+
+    case DETAIL_COARSE:
+      detail_set( DETAIL_FINE ) ;
+    break ;
+
+    case DETAIL_FINE:
+      detail_set( DETAIL_COARSE ) ;
+    break ;
+  }
+
+  layer_mark_dirty( s_world_layer ) ;
+}
+
+
+void
+detail_change_click_handler
+( ClickRecognizerRef recognizer
+, void              *context
+)
+{ detail_change( ) ; }
+
+
 /***  ---------------  Camera related  ---------------  ***/
 
-static CamQ3   s_cam ;
-static Q3      s_cam_viewPoint ;
-static Boxing  s_cam_viewPoint_boxing ;
-static Q       s_cam_zoom           = PBL_IF_RECT_ELSE(Q_from_float(+1.25f), Q_from_float(+1.05f)) ;
-static int32_t s_cam_rotZangle      = 0
-             , s_cam_rotXangle      = 0
-             , s_cam_rotZangleSpeed = 0
-             , s_cam_rotXangleSpeed = 0
+static CamQ3    s_cam ;
+static Q3       s_cam_viewPoint ;
+static Boxing   s_cam_viewPoint_boxing ;
+static Q        s_cam_zoom           = PBL_IF_RECT_ELSE(Q_from_float(+1.25f), Q_from_float(+1.05f)) ;
+static int32_t  s_cam_rotZangle      = 0
+             ,  s_cam_rotXangle      = 0
+             ,  s_cam_rotZangleSpeed = 0
+             ,  s_cam_rotXangleSpeed = 0
              ;
 
 
@@ -353,13 +399,11 @@ cam_initialize
       s_cam_rotZangleSpeed = TRIG_MAX_ANGLE >> 9 ;   //  2 * PI / 512
       s_cam_rotXangleSpeed = 0 ;
 
-/*
       #ifdef GIF
         s_cam_rotXangleSpeed = TRIG_MAX_ANGLE >> 11 ;
       #else
         s_cam_rotXangleSpeed = 0 ;
       #endif
-*/
     break ;
 
     case OSCILLATOR_FLOATING:
@@ -548,9 +592,9 @@ f_XY
 
 bool
 function_isVisible_fromPoint
-( const Q3     point
-, const Q3     viewPoint
-, const Boxing viewPointBoxing
+( const Q3      point
+, const Q3      viewPoint
+, const Boxing  viewPointBoxing
 )
 {
   Q3 point2viewer ;  Q3_sub( &point2viewer, &viewPoint, &point ) ;
@@ -585,13 +629,65 @@ function_isVisible_fromPoint
 
   if (k < kMin)
     kMin = k ;
-
+  
   // test for the point being epsilon close to the world box surface.
   if (kMin < (Q_1>>(VISIBILITY_MAX_ITERATIONS+1)))
     return true ;
-
+  
   if (kMin < Q_1)
-    Q3_sca( &point2viewer, kMin, &point2viewer ) ;    //  Do the clipping to the nearest min/max box wall.
+    Q3_sca( &point2viewer, kMin, &point2viewer ) ;    //  Do the clipping to the nearest min/max x/y/z box wall.
+
+/*
+  if (viewPointBoxing.testFlags != 0b000000)   //  Need world box clipping ?
+  {
+    Q k, kMin = Q_1 ;
+
+    //  1) Clip the view line to the nearest min/max box wall.
+    switch( viewPointBoxing.testFlags & 0b000011 )
+    {
+      case 0x000001:   //  xMajor
+        kMin = Q_div( world_xMax - point.x, point2viewer.x ) ;
+      break ;
+
+      case 0x000010:   //  xMinor
+        kMin = Q_div( world_xMin - point.x, point2viewer.x ) ;
+      break ;
+    }
+
+    switch( viewPointBoxing.testFlags & 0b001100 )
+    {
+      case 0x000100:   //  yMajor
+        k = Q_div( world_yMax - point.y, point2viewer.y ) ;
+        if (k < kMin)  kMin = k ;
+      break ;
+
+      case 0x001000:   //  yMinor
+        k = Q_div( world_yMin - point.y, point2viewer.y ) ;
+        if (k < kMin)  kMin = k ;
+      break ;
+    }
+
+    switch( viewPointBoxing.testFlags & 0b110000 )
+    {
+      case 0x010000:   //  zMajor
+        k = Q_div( world_zMax - point.z, point2viewer.z ) ;
+        if (k < kMin)  kMin = k ;
+      break ;
+
+      case 0x100000:   //  zMinor
+        k = Q_div( world_zMin - point.z, point2viewer.z ) ;
+        if (k < kMin)  kMin = k ;
+      break ;
+    }
+  
+    // test for the point being epsilon close to the world box surface.
+    if (kMin < (Q_1>>(VISIBILITY_MAX_ITERATIONS+1)))
+      return true ;
+  
+    if (kMin < Q_1)
+      Q3_sca( &point2viewer, kMin, &point2viewer ) ;    //  Do the clipping to the nearest min/max x/y/z box wall.
+  }
+*/
 
 
   //  2) Test the clipped line segment with increasingly smaller steps.
@@ -599,8 +695,8 @@ function_isVisible_fromPoint
   bool hasPositives = false ;
   bool hasNegatives = false ;
 
-  Q3 smallStep, probe ;
-  Q  smallStepK ;
+  Q3 probe , smallStep , bigStep  ;
+  Q  probeK, smallStepK, bigStepK ;
 
   for ( smallStepK = Q_1     , smallStep = point2viewer                                  //  Start with the biggest possible small step, all the way to the nearest point in the min/max box (k=1).
       ; smallStepK >= Q_1>>VISIBILITY_MAX_ITERATIONS                                     //  Newton (split in half) steps. TODO: refine exit criteria.
@@ -609,12 +705,9 @@ function_isVisible_fromPoint
   {
     Q3_add( &probe, &point, &smallStep ) ;
 
-    Q3 bigStep ;
-    Q  bigStepK ;
-
-    for ( k = smallStepK,  bigStepK = smallStepK << 1,  bigStep.x = smallStep.x << 1,  bigStep.y = smallStep.y << 1,  bigStep.z = smallStep.z << 1
-        ; k <= Q_1
-        ; k += bigStepK ,  Q3_add( &probe, &probe, &bigStep )
+    for ( probeK = smallStepK,  bigStepK = smallStepK << 1,  bigStep.x = smallStep.x << 1,  bigStep.y = smallStep.y << 1,  bigStep.z = smallStep.z << 1
+        ; probeK <= Q_1
+        ; probeK += bigStepK ,  Q3_add( &probe, &probe, &bigStep )
         )
     {
       Q probeAltitude = probe.z - f_XY( probe.x, probe.y ) ;
@@ -855,16 +948,6 @@ static bool       s_color_isInverted ;
 
     return color ;   //  Will never reach this line, just to mute compiler error.
   }
-
-
-  static bool   s_antialiasing = ANTIALIASING_DEFAULT ;
-
-  void
-  antialiasing_change_click_handler
-  ( ClickRecognizerRef recognizer
-  , void              *context
-  )
-  { s_antialiasing = !s_antialiasing ; }
 #else
   void
   color_initialize
@@ -953,6 +1036,7 @@ world_initialize
   illumination_set( ILLUMINATION_DEFAULT ) ;
   oscillator_set  ( OSCILLATOR_DEFAULT   ) ;
   transparency_set( TRANSPARENCY_DEFAULT ) ;
+  detail_set( DETAIL_DEFAULT ) ;
 
 #ifndef GIF
   accelSamplers_initialize( ) ;
@@ -1464,13 +1548,19 @@ Fuxel_visualyIdentical
 , const Fuxel *f2Ptr
 )
 {
-  return f1Ptr->visibility.cam == f2Ptr->visibility.cam
-  #ifdef PBL_COLOR
-      && gcolor_equal( f1Ptr->pen.color, f2Ptr->pen.color )
-  #else
-      && f1Ptr->pen.ink == f2Ptr->pen.ink
-  #endif
-       ;
+  if (f1Ptr->visibility.cam != f2Ptr->visibility.cam)
+    return false ;
+
+  if (s_detail == DETAIL_FINE)
+  {
+    #ifdef PBL_COLOR
+      return gcolor_equal( f1Ptr->pen.color, f2Ptr->pen.color ) ;
+    #else
+      return (f1Ptr->pen.ink == f2Ptr->pen.ink) ;
+    #endif
+  }
+
+  return true ;
 }
 
 
@@ -1802,7 +1892,19 @@ world_draw
 #endif
 
 #ifdef PBL_COLOR
-  graphics_context_set_antialiased( gCtx, s_antialiasing ) ;
+  switch (s_detail)
+  {
+    case DETAIL_UNDEFINED:
+    break ;
+
+    case DETAIL_COARSE:
+      graphics_context_set_antialiased( gCtx, false ) ;
+    break ;
+
+    case DETAIL_FINE:
+      graphics_context_set_antialiased( gCtx, true ) ;
+    break ;
+  }
 #else
   graphics_context_set_stroke_color( gCtx, s_color_stroke ) ;
 #endif
@@ -1961,19 +2063,21 @@ click_config_provider
                              , NULL
                              ) ;
 
-#ifdef PBL_COLOR
   window_long_click_subscribe( BUTTON_ID_DOWN
                              , 0
-                             , (ClickHandler) antialiasing_change_click_handler
+                             , (ClickHandler) detail_change_click_handler
                              , NULL
                              ) ;
-#else
+
+/*  TODO double UP press to invert b&w
+#ifndef PBL_COLOR
   window_long_click_subscribe( BUTTON_ID_DOWN
                              , 0
                              , (ClickHandler) invert_change_click_handler
                              , NULL
                              ) ;
 #endif
+*/
 }
 
 

@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 13h15 September 27 2016  GMT
+   Last revision: 21h45 September 28 2016  GMT
 */
 
 #include <pebble.h>
@@ -51,6 +51,13 @@ typedef enum { ILLUMINATION_UNDEFINED
              , ILLUMINATION_SPOTLIGHT
              }
 Illumination ;
+
+
+typedef enum { DETAIL_UNDEFINED
+             , DETAIL_COARSE
+             , DETAIL_FINE
+             }
+Detail ;
 
 
 /* -----------   STRUCTS   ----------- */
