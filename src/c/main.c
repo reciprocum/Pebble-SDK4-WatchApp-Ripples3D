@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 21h45 September 28 2016  GMT
+   Last revision: 11h05 October 04 2016  GMT
 */
 
 #include <pebble.h>
@@ -27,6 +27,9 @@ static Window         *s_window ;
 static Layer          *s_window_layer ;
 static Layer          *s_world_layer ;
 static ActionBarLayer *s_action_bar_layer ;
+
+// User related
+static int s_user_secondsInactive  = 0 ;
 
 // World related
 const  Q    grid_scale     = Q_from_float(GRID_SCALE) ;
@@ -87,10 +90,6 @@ static AppTimer  *s_world_updateTimer_ptr   = NULL ;
 
 /***  ---------------  Prototypes  ---------------  ***/
 
-void grid_dist2osc_update( ) ;
-void position_setFromSensors( Q2 *positionPtr ) ;
-void acceleration_setFromSensors( Q2 *accelerationPtr ) ;
-
 void
 cam_config
 ( const Q3       viewPoint
@@ -98,9 +97,13 @@ cam_config
 , const int32_t  rotXangle
 ) ;
 
+void position_setFromSensors( Q2 *positionPtr ) ;
+void acceleration_setFromSensors( Q2 *accelerationPtr ) ;
 void grid_minor_dist2osc_update( ) ;
 void grid_minor_z_update( ) ;
 void grid_minor_visibility_update( ) ;
+void grid_dist2osc_update( ) ;
+void invert_set( const bool inverted ) ;
 
 
 /***  ---------------  PATTERN  ---------------  ***/
@@ -126,6 +129,10 @@ pattern_set
     case PATTERN_UNDEFINED:
     break ;
   }
+
+  #ifndef PBL_COLOR
+    invert_set( s_pattern != PATTERN_DOTS  &&  s_illumination != ILLUMINATION_SPOTLIGHT ) ;
+  #endif
 }
 
 
@@ -165,7 +172,10 @@ pattern_change_click_handler
 ( ClickRecognizerRef recognizer
 , void              *context
 )
-{ pattern_change( ) ; }
+{
+  s_user_secondsInactive = 0 ;
+  pattern_change( ) ;
+}
 
 
 /***  ---------------  TRANSPARENCY  ---------------  ***/
@@ -235,7 +245,10 @@ transparency_change_click_handler
 ( ClickRecognizerRef recognizer
 , void              *context
 )
-{ transparency_change( ) ; }
+{
+  s_user_secondsInactive = 0 ;
+  transparency_change( ) ;
+}
 
 
 /***  ---------------  COLORIZATION  ---------------  ***/
@@ -280,7 +293,10 @@ colorization_change_click_handler
 ( ClickRecognizerRef recognizer
 , void              *context
 )
-{ colorization_change( ) ; }
+{
+  s_user_secondsInactive = 0 ;
+  colorization_change( ) ;
+}
 
 
 /***  ---------------  ILUMINATION  ---------------  ***/
@@ -293,6 +309,10 @@ illumination_set
     return ;
 
   s_illumination = illumination ;
+
+  #ifndef PBL_COLOR
+    invert_set( s_pattern != PATTERN_DOTS  &&  s_illumination != ILLUMINATION_SPOTLIGHT ) ;
+  #endif
 }
 
 
@@ -325,7 +345,10 @@ illumination_change_click_handler
 ( ClickRecognizerRef recognizer
 , void              *context
 )
-{ illumination_change( ) ; }
+{
+  s_user_secondsInactive = 0 ;
+  illumination_change( ) ;
+}
 
 
 /***  ---------------  DETAIL  ---------------  ***/
@@ -370,7 +393,10 @@ detail_change_click_handler
 ( ClickRecognizerRef recognizer
 , void              *context
 )
-{ detail_change( ) ; }
+{
+  s_user_secondsInactive = 0 ;
+  detail_change( ) ;
+}
 
 
 /***  ---------------  Camera related  ---------------  ***/
@@ -472,11 +498,17 @@ screen_project
 ( GPoint *screen, const Q3 world )
 {
   // Calculate (c)amera film plane 2D coordinates of 3D (w)orld points.
-  Q2 camera ;  CamQ3_view( &camera, &s_cam, &world ) ;
+  Q2 camera ;
 
-  // Convert camera coordinates to screen/device coordinates.
-  const Q screenX = Q_mul( screen_project_scale, camera.x ) + screen_project_translate.x ;  screen->x = Q_to_int(screenX) ;
-  const Q screenY = Q_mul( screen_project_scale, camera.y ) + screen_project_translate.y ;  screen->y = Q_to_int(screenY) ;
+  Q2_add( &camera
+        , &screen_project_translate
+        , Q2_sca( &camera
+                , screen_project_scale
+                , CamQ3_view( &camera, &s_cam, &world )
+                )
+        ) ;
+
+  screen->x = Q_to_int(camera.x) ;  screen->y = Q_to_int(camera.y) ;
 }
 
 
@@ -484,12 +516,12 @@ screen_project
 
 void
 oscillator_set
-( Oscillator oscilator )
+( Oscillator oscillator )
 {
-  if (s_oscillator == oscilator)
+  if (s_oscillator == oscillator)
     return ;
 
-  switch (s_oscillator = oscilator)
+  switch (s_oscillator = oscillator)
   {
     case OSCILLATOR_ANCHORED:
     case OSCILLATOR_UNDEFINED:
@@ -512,6 +544,10 @@ oscillator_set
         Q2_set( &oscillator_speed, 3072, -1536 ) ;
       #else
         oscillator_speed = Q2_origin ;   //  No initial speed.
+
+        pattern_set( PATTERN_DOTS ) ;
+        transparency_set( TRANSPARENCY_TRANSLUCENT ) ;
+        illumination_set( ILLUMINATION_DIFUSE ) ;
       #endif
     break ;
   } ;
@@ -551,7 +587,10 @@ oscillator_change_click_handler
 ( ClickRecognizerRef recognizer
 , void              *context
 )
-{ oscillator_change( ) ; }
+{
+  s_user_secondsInactive = 0 ;
+  oscillator_change( ) ;
+}
 
 
 /***  ---------------  z := f( x, y )  ---------------  ***/
@@ -636,58 +675,6 @@ function_isVisible_fromPoint
   
   if (kMin < Q_1)
     Q3_sca( &point2viewer, kMin, &point2viewer ) ;    //  Do the clipping to the nearest min/max x/y/z box wall.
-
-/*
-  if (viewPointBoxing.testFlags != 0b000000)   //  Need world box clipping ?
-  {
-    Q k, kMin = Q_1 ;
-
-    //  1) Clip the view line to the nearest min/max box wall.
-    switch( viewPointBoxing.testFlags & 0b000011 )
-    {
-      case 0x000001:   //  xMajor
-        kMin = Q_div( world_xMax - point.x, point2viewer.x ) ;
-      break ;
-
-      case 0x000010:   //  xMinor
-        kMin = Q_div( world_xMin - point.x, point2viewer.x ) ;
-      break ;
-    }
-
-    switch( viewPointBoxing.testFlags & 0b001100 )
-    {
-      case 0x000100:   //  yMajor
-        k = Q_div( world_yMax - point.y, point2viewer.y ) ;
-        if (k < kMin)  kMin = k ;
-      break ;
-
-      case 0x001000:   //  yMinor
-        k = Q_div( world_yMin - point.y, point2viewer.y ) ;
-        if (k < kMin)  kMin = k ;
-      break ;
-    }
-
-    switch( viewPointBoxing.testFlags & 0b110000 )
-    {
-      case 0x010000:   //  zMajor
-        k = Q_div( world_zMax - point.z, point2viewer.z ) ;
-        if (k < kMin)  kMin = k ;
-      break ;
-
-      case 0x100000:   //  zMinor
-        k = Q_div( world_zMin - point.z, point2viewer.z ) ;
-        if (k < kMin)  kMin = k ;
-      break ;
-    }
-  
-    // test for the point being epsilon close to the world box surface.
-    if (kMin < (Q_1>>(VISIBILITY_MAX_ITERATIONS+1)))
-      return true ;
-  
-    if (kMin < Q_1)
-      Q3_sca( &point2viewer, kMin, &point2viewer ) ;    //  Do the clipping to the nearest min/max x/y/z box wall.
-  }
-*/
 
 
   //  2) Test the clipped line segment with increasingly smaller steps.
@@ -888,7 +875,6 @@ grid_initialize
 
 static GColor     s_color_stroke ;
 static GColor     s_color_background ;
-static bool       s_color_isInverted ;
 
 
 #ifdef PBL_COLOR
@@ -900,7 +886,6 @@ static bool       s_color_isInverted ;
   {
     s_color_stroke     = GColorWhite ;
     s_color_background = GColorBlack ;
-    s_color_isInverted = false ;
 
     s_colorMap[7] = GColorWhite ;
     s_colorMap[6] = GColorMelon ;
@@ -955,7 +940,6 @@ static bool       s_color_isInverted ;
   {
     s_color_stroke     = GColorBlack ;
     s_color_background = GColorWhite ;
-    s_color_isInverted = true ;
   }
 
 
@@ -967,8 +951,11 @@ static bool       s_color_isInverted ;
 
     switch (s_colorization)
     {
-      case COLORIZATION_MONOCHROMATIC:
       case COLORIZATION_UNDEFINED:
+        ink = INK0 ;
+      break ;
+
+      case COLORIZATION_MONOCHROMATIC:
         ink = INK100 ;
       break ;
 
@@ -994,12 +981,10 @@ static bool       s_color_isInverted ;
 
 
   void
-  invert_change
-  ( )
+  invert_set
+  ( const bool inverted )
   {
-    s_color_isInverted = !s_color_isInverted ;
-
-    if (s_color_isInverted)
+    if (inverted)
     {
       s_color_stroke     = GColorBlack ;
       s_color_background = GColorWhite ;
@@ -1010,17 +995,12 @@ static bool       s_color_isInverted ;
       s_color_background = GColorBlack ;
     }
 
-    window_set_background_color          ( s_window          , s_color_background ) ;
-    action_bar_layer_set_background_color( s_action_bar_layer, s_color_background ) ;
+    if (s_window != NULL)
+    {
+      window_set_background_color          ( s_window          , s_color_background ) ;
+      action_bar_layer_set_background_color( s_action_bar_layer, s_color_background ) ;
+    }
   }
-
-
-  void
-  invert_change_click_handler
-  ( ClickRecognizerRef recognizer
-  , void              *context
-  )
-  { invert_change( ) ; }
 #endif
 
 
@@ -1208,15 +1188,27 @@ void
 position_setFromSensors
 ( Q2 *positionPtr )
 {
-  AccelData ad ;
-
-  if (accel_service_peek( &ad ) < 0)         // Accel service not available.
+  #ifdef GIF
+    // Fixed point position for GIF generation.
     *positionPtr = Q2_origin ;
-  else
-  {
-    positionPtr->x = Q_mul( grid_halfScale, ad.x << 6 ) ;
-    positionPtr->y = Q_mul( grid_halfScale, ad.y << 6 ) ;
-  }
+  #else
+    AccelData ad ;
+  
+    if (accel_service_peek( &ad ) < 0)         // Accel service not available.
+      *positionPtr = Q2_origin ;
+    else
+    {
+      Sampler_push( accelSampler_x, ad.x ) ;
+      Sampler_push( accelSampler_y, ad.y ) ;
+  
+      const float kAvg = 0.001f / accelSampler_x->samplesNum ;
+      const float avgX = (float)(kAvg * accelSampler_x->samplesAcum ) ;
+      const float avgY = (float)(kAvg * accelSampler_y->samplesAcum ) ;
+  
+      Q2_set( positionPtr, Q_from_float( avgX ), Q_from_float( avgY )) ;
+      Q2_sca( positionPtr, grid_halfScale, positionPtr ) ;
+    }
+  #endif
 }
 
 
@@ -1244,45 +1236,43 @@ viewPoint_setFromSensors
     // Fixed point view for GIF generation.
     Q3_set( viewPointPtr, Q_from_float( -0.1f ), Q_from_float( +1.0f ), Q_from_float( +0.7f ) ) ;
   #else
+    // Non GIF => Interactive: use acelerometer to affect camera's view point position.
+    AccelData ad ;
+
+    if (accel_service_peek( &ad ) < 0)         // Accel service not available.
     {
-      // Non GIF => Interactive: use acelerometer to affect camera's view point position.
-      AccelData ad ;
-  
-      if (accel_service_peek( &ad ) < 0)         // Accel service not available.
-      {
-        Sampler_push( accelSampler_x,  -81 ) ;   // STEADY viewPoint attractor.
-        Sampler_push( accelSampler_y, -816 ) ;   // STEADY viewPoint attractor.
-        Sampler_push( accelSampler_z, -571 ) ;   // STEADY viewPoint attractor.
-      }
-      else
-      {
-        #ifdef EMU
-          if (ad.x == 0  &&  ad.y == 0  &&  ad.z == -1000)   // Under EMU with SENSORS off this is the default output.
-          {
-            Sampler_push( accelSampler_x,  -81 ) ;
-            Sampler_push( accelSampler_y, -816 ) ;
-            Sampler_push( accelSampler_z, -571 ) ;
-          }
-          else                                               // If running under EMU the SENSOR feed must be ON.
-          {
-            Sampler_push( accelSampler_x, ad.x ) ;
-            Sampler_push( accelSampler_y, ad.y ) ;
-            Sampler_push( accelSampler_z, ad.z ) ;
-          }
-        #else
-          Sampler_push( accelSampler_x, ad.x ) ;
-          Sampler_push( accelSampler_y, ad.y ) ;
-          Sampler_push( accelSampler_z, ad.z ) ;
-        #endif
-      }
-
-      const float kAvg = 0.001f / accelSampler_x->samplesNum ;
-      const float avgX = (float)(kAvg * accelSampler_x->samplesAcum ) ;
-      const float avgY =-(float)(kAvg * accelSampler_y->samplesAcum ) ;
-      const float avgZ =-(float)(kAvg * accelSampler_z->samplesAcum ) ;
-
-      Q3_set( viewPointPtr, Q_from_float( avgX ), Q_from_float( avgY ), Q_from_float( avgZ ) ) ;
+      Sampler_push( accelSampler_x,  -81 ) ;   // STEADY viewPoint attractor.
+      Sampler_push( accelSampler_y, -816 ) ;   // STEADY viewPoint attractor.
+      Sampler_push( accelSampler_z, -571 ) ;   // STEADY viewPoint attractor.
     }
+    else
+    {
+      #ifdef EMU
+      if (ad.x == 0  &&  ad.y == 0  &&  ad.z == -1000)   // Under EMU with SENSORS off this is the default output.
+      {
+        Sampler_push( accelSampler_x,  -81 ) ;
+        Sampler_push( accelSampler_y, -816 ) ;
+        Sampler_push( accelSampler_z, -571 ) ;
+      }
+      else                                               // If running under EMU the SENSOR feed must be ON.
+      {
+        Sampler_push( accelSampler_x, ad.x ) ;
+        Sampler_push( accelSampler_y, ad.y ) ;
+        Sampler_push( accelSampler_z, ad.z ) ;
+      }
+      #else
+      Sampler_push( accelSampler_x, ad.x ) ;
+      Sampler_push( accelSampler_y, ad.y ) ;
+      Sampler_push( accelSampler_z, ad.z ) ;
+      #endif
+    }
+
+    const float kAvg = 0.001f / accelSampler_x->samplesNum ;
+    const float avgX = (float)(kAvg * accelSampler_x->samplesAcum ) ;
+    const float avgY =-(float)(kAvg * accelSampler_y->samplesAcum ) ;
+    const float avgZ =-(float)(kAvg * accelSampler_z->samplesAcum ) ;
+
+    Q3_set( viewPointPtr, Q_from_float( avgX ), Q_from_float( avgY ), Q_from_float( avgZ ) ) ;
   #endif
 }
 
@@ -1314,7 +1304,7 @@ void
 oscillator_update
 ( )
 {
-  oscillator_anglePhase = TRIG_MAX_ANGLE - ((s_world_updateCount << 8) & 0xFFFF) ;   //  2*PI - (256 * s_world_updateCount) % TRIG_MAX_RATIO
+  oscillator_anglePhase = TRIG_MAX_ANGLE - ((s_world_updateCount << OSCILLATOR_PHASE_SPEED) & 0xFFFF) ;   //  2*PI - (256 * s_world_updateCount) % TRIG_MAX_RATIO
 
   switch (s_oscillator)
   {
@@ -1397,20 +1387,6 @@ world_update
 
 
 void
-function_draw_pixel
-( GContext    *gCtx
-, const Fuxel  f
-)
-{
-#ifdef PBL_COLOR
-  graphics_context_set_stroke_color( gCtx, f.pen.color ) ;
-#endif
-
-  graphics_draw_pixel( gCtx, f.screen ) ;
-}
-
-
-void
 grid_major_drawPixel
 ( GContext *gCtx )
 {
@@ -1420,23 +1396,20 @@ grid_major_drawPixel
     
     for (int j = 0  ;  j < GRID_LINES  ;  ++j)
     {
-      Fuxel f = (Fuxel){ .world      = (Q3){ .x = grid_major_x_i
-                                           , .y = grid_major_y[j] << COORD_SHIFT
-                                           , .z = grid_major_z[i][j] << Z_SHIFT
-                                           }
-                       , .dist2osc   = grid_major_dist2osc[i][j] << DIST_SHIFT
-                       , .visibility = grid_major_visibility[i][j]
-                       , .screen     = grid_major_screen[i][j]
-                       }
-      ;
+      Visibility f_visibility = grid_major_visibility[i][j] ;
 
-      if (f.visibility.cam)
+      if (f_visibility.cam)
       {
         #ifdef PBL_COLOR
-          f.pen.color = Fuxel_color( &f ) ;
+          Fuxel f = (Fuxel){ .dist2osc   = grid_major_dist2osc[i][j] << DIST_SHIFT
+                           , .visibility = f_visibility
+                           }
+          ;
+
+          graphics_context_set_stroke_color( gCtx, Fuxel_color( &f ) ) ;
         #endif
 
-        function_draw_pixel( gCtx, f ) ;
+        graphics_draw_pixel( gCtx, grid_major_screen[i][j] ) ;
       }
     }
   }
@@ -1453,23 +1426,20 @@ grid_minor_drawPixel
     
     for (int j = 0  ;  j < GRID_LINES-1 ;  j++)
     {
-      Fuxel f = (Fuxel){ .world      = (Q3){ .x = grid_minor_x_i
-                                           , .y = grid_minor_y[j] << COORD_SHIFT
-                                           , .z = grid_minor_z[i][j] << Z_SHIFT
-                                           }
-                       , .dist2osc   = grid_minor_dist2osc[i][j] << DIST_SHIFT
-                       , .visibility = grid_minor_visibility[i][j]
-                       , .screen     = grid_minor_screen[i][j]
-                       }
-      ;
+      Visibility f_visibility = grid_minor_visibility[i][j] ;
 
-      if (f.visibility.cam)
+      if (f_visibility.cam)
       {
         #ifdef PBL_COLOR
-          f.pen.color = Fuxel_color( &f ) ;
+          Fuxel f = (Fuxel){ .dist2osc   = grid_minor_dist2osc[i][j] << DIST_SHIFT
+                           , .visibility = f_visibility
+                           }
+          ;
+
+          graphics_context_set_stroke_color( gCtx, Fuxel_color( &f ) ) ;
         #endif
 
-        function_draw_pixel( gCtx, f ) ;
+        graphics_draw_pixel( gCtx, grid_minor_screen[i][j] ) ;
       }
     }
   }
@@ -1486,23 +1456,20 @@ grid_major_drawPixel_XRAY
     
     for (int j = 0  ;  j < GRID_LINES  ;  ++j)
     {
-      Fuxel f = (Fuxel){ .world      = (Q3){ .x = grid_major_x_i
-                                           , .y = grid_major_y[j] << COORD_SHIFT
-                                           , .z = grid_major_z[i][j] << Z_SHIFT
-                                           }
-                       , .dist2osc   = grid_major_dist2osc[i][j] << DIST_SHIFT
-                       , .visibility = grid_major_visibility[i][j]
-                       , .screen     = grid_major_screen[i][j]
-                       }
-      ;
+      Visibility f_visibility = grid_major_visibility[i][j] ;
 
-      if (!f.visibility.cam)
+      if (!f_visibility.cam)
       {
         #ifdef PBL_COLOR
-          f.pen.color = Fuxel_color( &f ) ;
+          Fuxel f = (Fuxel){ .dist2osc   = grid_major_dist2osc[i][j] << DIST_SHIFT
+                           , .visibility = f_visibility
+                           }
+          ;
+
+          graphics_context_set_stroke_color( gCtx, Fuxel_color( &f ) ) ;
         #endif
 
-        function_draw_pixel( gCtx, f ) ;
+        graphics_draw_pixel( gCtx, grid_major_screen[i][j] ) ;
       }
     }
   }
@@ -1519,23 +1486,20 @@ grid_minor_drawPixel_XRAY
     
     for (int j = 0  ;  j < GRID_LINES-1  ;  ++j)
     {
-      Fuxel f = (Fuxel){ .world      = (Q3){ .x = grid_minor_x_i
-                                           , .y = grid_minor_y[j] << COORD_SHIFT
-                                           , .z = grid_minor_z[i][j] << Z_SHIFT
-                                           }
-                       , .dist2osc   = grid_minor_dist2osc[i][j] << DIST_SHIFT
-                       , .visibility = grid_minor_visibility[i][j]
-                       , .screen     = grid_minor_screen[i][j]
-                       }
-      ;
+      Visibility f_visibility = grid_minor_visibility[i][j] ;
 
-      if (!f.visibility.cam)
+      if (!f_visibility.cam)
       {
         #ifdef PBL_COLOR
-          f.pen.color = Fuxel_color( &f ) ;
+          Fuxel f = (Fuxel){ .dist2osc   = grid_minor_dist2osc[i][j] << DIST_SHIFT
+                           , .visibility = f_visibility
+                           }
+          ;
+
+          graphics_context_set_stroke_color( gCtx, Fuxel_color( &f ) ) ;
         #endif
 
-        function_draw_pixel( gCtx, f ) ;
+        graphics_draw_pixel( gCtx, grid_minor_screen[i][j] ) ;
       }
     }
   }
@@ -1564,6 +1528,7 @@ Fuxel_visualyIdentical
 }
 
 
+/*
 Fuxel
 Fuxel_median
 ( const Fuxel *f1Ptr
@@ -1587,6 +1552,7 @@ Fuxel_median
 
   return median ;
 }
+*/
 
 
 void
@@ -1594,22 +1560,37 @@ function_draw_line
 ( GContext    *gCtx
 , const Fuxel  f0
 , const Fuxel  f1
+, const bool   zoomIn
 )
 {
   if (f0.visibility.cam || f1.visibility.cam)    //  One of the points is visible ?
   {
-    if (!Fuxel_visualyIdentical( &f0, &f1 ))   //  Is there any cam/spotlight terminator to find ?
+    if (zoomIn || !Fuxel_visualyIdentical( &f0, &f1 ))   //  Is there any cam/spotlight terminator to find ?
     {
       // Calculate screen distance between f0 & f1.
       int sdx = f0.screen.x - f1.screen.x  ;  if (sdx < 0) sdx = -sdx ;   // Abs delta screen x.
       int sdy = f0.screen.y - f1.screen.y  ;  if (sdy < 0) sdy = -sdy ;   // Abs delta screen y.
     
-      if ((sdx + sdy) > TERMINATOR_TOLERANCE_PXL)   // Screen distance still too far apart ?
+      if ((sdx + sdy) > LINE_PRECISION_PXL)   // Screen distance still too far apart ?
       {
-        // Need to recursively zoom in on the visual terminator.
-        Fuxel  half = Fuxel_median( &f0, &f1 ) ;
-        function_draw_line( gCtx, f0, half ) ;
-        function_draw_line( gCtx, half, f1 ) ;
+        // Need to recursively zoom in on.
+        Fuxel  half ;
+
+        half.world.x  = (f0.world.x + f1.world.x) >> 1 ;
+        half.world.y  = (f0.world.y + f1.world.y) >> 1 ;
+        half.dist2osc = oscillator_distance( half.world.x, half.world.y ) ;
+        half.world.z  = f_distance( half.dist2osc ) ;
+        Visibility_set( &half.visibility, half.world ) ;
+        screen_project( &half.screen, half.world ) ;
+      
+        #ifdef PBL_COLOR
+          half.pen.color = Fuxel_color( &half ) ;
+        #else
+          half.pen.ink   = Fuxel_ink( &half ) ;
+        #endif
+      
+        function_draw_line( gCtx, f0, half, zoomIn ) ;
+        function_draw_line( gCtx, half, f1, zoomIn ) ;
         return ;
       }
     }
@@ -1672,11 +1653,9 @@ grid_major_drawLineX
     #endif
 
     #ifdef GIF
-      Fuxel  half = Fuxel_median( &f0, &f1 ) ;
-      function_draw_line( gCtx, f0, half ) ;
-      function_draw_line( gCtx, half, f1 ) ;
+      function_draw_line( gCtx, f0, f1, true ) ;
     #else
-      function_draw_line( gCtx, f0, f1 ) ;
+      function_draw_line( gCtx, f0, f1, false ) ;
     #endif
   }
 }
@@ -1729,11 +1708,9 @@ grid_major_drawLineY
     #endif
 
     #ifdef GIF
-      Fuxel  half = Fuxel_median( &f0, &f1 ) ;
-      function_draw_line( gCtx, f0, half ) ;
-      function_draw_line( gCtx, half, f1 ) ;
+      function_draw_line( gCtx, f0, f1, true ) ;
     #else
-      function_draw_line( gCtx, f0, f1 ) ;
+      function_draw_line( gCtx, f0, f1, false ) ;
     #endif
   }
 }
@@ -1822,11 +1799,9 @@ grid_minor_drawLineX
     #endif
 
     #ifdef GIF
-      Fuxel  half = Fuxel_median( &f0, &f1 ) ;
-      function_draw_line( gCtx, f0, half ) ;
-      function_draw_line( gCtx, half, f1 ) ;
+      function_draw_line( gCtx, f0, f1, true ) ;
     #else
-      function_draw_line( gCtx, f0, f1 ) ;
+      function_draw_line( gCtx, f0, f1, false ) ;
     #endif
   }
 }
@@ -1972,6 +1947,27 @@ world_draw
 
 
 void
+world_stop
+( )
+{
+  // Stop animation.
+  if (s_world_updateTimer_ptr != NULL)
+  {
+    app_timer_cancel( s_world_updateTimer_ptr ) ;
+    s_world_updateTimer_ptr = NULL ;
+  }
+
+#ifndef GIF
+  // Stop clock.
+  tick_timer_service_unsubscribe( ) ;
+
+  // Gravity unaware.
+  accel_data_service_unsubscribe( ) ;
+#endif
+}
+
+
+void
 world_finalize
 ( )
 {
@@ -1995,35 +1991,38 @@ world_update_timer_handler
 }
 
 
+#ifndef GIF
+  void
+  tick_timer_service_handler
+  ( struct tm *tick_time
+  , TimeUnits  units_changed
+  )
+  {
+    // Auto-exit application on lack of user interaction.
+    if (++s_user_secondsInactive > USER_SECONDSINACTIVE_MAX)
+    {
+      world_stop( ) ;
+      world_finalize( ) ;
+      window_stack_pop_all( true )	;    // Exit app.
+    }
+  }
+#endif
+
+
 void
 world_start
 ( )
 {
-#ifndef GIF
-  // Gravity aware.
- 	accel_data_service_subscribe( 0, accel_data_service_handler ) ;
-#endif
+  #ifndef GIF
+    // Gravity aware.
+   	accel_data_service_subscribe( 0, accel_data_service_handler ) ;
+  
+    // Activate s_clock
+    tick_timer_service_subscribe( SECOND_UNIT, tick_timer_service_handler ) ;    
+  #endif
 
   // Start animation.
   world_update_timer_handler( NULL ) ;
-}
-
-
-void
-world_stop
-( )
-{
-  // Stop animation.
-  if (s_world_updateTimer_ptr != NULL)
-  {
-    app_timer_cancel( s_world_updateTimer_ptr ) ;
-    s_world_updateTimer_ptr = NULL ;
-  }
-
-#ifndef GIF
-  // Gravity unaware.
-  accel_data_service_unsubscribe( ) ;
-#endif
 }
 
 
@@ -2040,15 +2039,15 @@ click_config_provider
                                , (ClickHandler) pattern_change_click_handler
                                ) ;
 
-#ifndef GIF
-  window_single_click_subscribe( BUTTON_ID_DOWN
-                               , (ClickHandler) oscillator_change_click_handler
-                               ) ;
-#else
-  window_single_click_subscribe( BUTTON_ID_DOWN
-                               , (ClickHandler) gifStepper_advance_click_handler
-                               ) ;
-#endif
+  #ifdef GIF
+    window_single_click_subscribe( BUTTON_ID_DOWN
+                                 , (ClickHandler) gifStepper_advance_click_handler
+                                 ) ;
+  #else
+    window_single_click_subscribe( BUTTON_ID_DOWN
+                                 , (ClickHandler) oscillator_change_click_handler
+                                 ) ;
+  #endif
 
   // Long click.
   window_long_click_subscribe( BUTTON_ID_UP
@@ -2068,16 +2067,6 @@ click_config_provider
                              , (ClickHandler) detail_change_click_handler
                              , NULL
                              ) ;
-
-/*  TODO double UP press to invert b&w
-#ifndef PBL_COLOR
-  window_long_click_subscribe( BUTTON_ID_DOWN
-                             , 0
-                             , (ClickHandler) invert_change_click_handler
-                             , NULL
-                             ) ;
-#endif
-*/
 }
 
 

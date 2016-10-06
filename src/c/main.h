@@ -5,25 +5,30 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 21h45 September 28 2016  GMT
+   Last revision: 11h05 October 04 2016  GMT
 */
 
 #include "Config.h"
 
 
+/* -----------   User   ----------- */
+
+#define USER_SECONDSINACTIVE_MAX       120
+
+
 /* -----------   Default modes   ----------- */
 
 #ifdef GIF
-  #define  OSCILLATOR_DEFAULT      OSCILLATOR_ANCHORED
-  #define  PATTERN_DEFAULT         PATTERN_LINES
+  #define  OSCILLATOR_DEFAULT      OSCILLATOR_BOUNCING
+  #define  PATTERN_DEFAULT         PATTERN_DOTS
   #define  TRANSPARENCY_DEFAULT    TRANSPARENCY_OPAQUE
   #define  COLORIZATION_DEFAULT    COLORIZATION_DISTANCE
-  #define  ILLUMINATION_DEFAULT    ILLUMINATION_DIFUSE
+  #define  ILLUMINATION_DEFAULT    ILLUMINATION_SPOTLIGHT
   #define  DETAIL_DEFAULT          DETAIL_FINE
   #define  ANIMATION_INTERVAL_MS   100
 
   #define VISIBILITY_MAX_ITERATIONS   5
-  #define TERMINATOR_TOLERANCE_PXL    2
+  #define LINE_PRECISION_PXL          2
 #else
   #define  OSCILLATOR_DEFAULT      OSCILLATOR_ANCHORED
   #define  PATTERN_DEFAULT         PATTERN_LINES
@@ -45,7 +50,7 @@
   #endif
 
   #define VISIBILITY_MAX_ITERATIONS   4
-  #define TERMINATOR_TOLERANCE_PXL    3
+  #define LINE_PRECISION_PXL          3
 #endif
 
 
@@ -79,4 +84,11 @@
 //  Controls how fast a wrist tilt will influence the oscilator horizontal moving speed.
 //  Increase this value for a "heavier" feeling
 //  Decrease this value for a "lighter" feeling
-#define OSCILLATOR_INERTIA_LEVEL        2
+#define OSCILLATOR_INERTIA_LEVEL        1
+
+//  Controls how fast the oscillator cycles.
+//  Increase this value for a "faster" wave
+//  Decrease this value for a "slower" wave
+#define OSCILLATOR_PHASE_SPEED        10
+
+

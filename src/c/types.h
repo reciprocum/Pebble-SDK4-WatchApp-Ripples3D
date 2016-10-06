@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 21h45 September 28 2016  GMT
+   Last revision: 11h05 October 04 2016  GMT
 */
 
 #include <pebble.h>
