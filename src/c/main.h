@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 11h05 October 04 2016  GMT
+   Last revision: 25 October 2016
 */
 
 #include "Config.h"
@@ -18,9 +18,9 @@
 
 /* -----------   Default modes   ----------- */
 
-#ifdef GIF
+#if defined(GIF)
   #define  OSCILLATOR_DEFAULT      OSCILLATOR_BOUNCING
-  #define  PATTERN_DEFAULT         PATTERN_DOTS
+  #define  PATTERN_DEFAULT         PATTERN_STRIPES
   #define  TRANSPARENCY_DEFAULT    TRANSPARENCY_OPAQUE
   #define  COLORIZATION_DEFAULT    COLORIZATION_DISTANCE
   #define  ILLUMINATION_DEFAULT    ILLUMINATION_SPOTLIGHT
@@ -34,7 +34,7 @@
   #define  PATTERN_DEFAULT         PATTERN_LINES
   #define  TRANSPARENCY_DEFAULT    TRANSPARENCY_TRANSLUCENT
 
-  #ifdef PBL_COLOR
+  #if defined(PBL_COLOR)
     #define  COLORIZATION_DEFAULT     COLORIZATION_DISTANCE
   #else
     #define  COLORIZATION_DEFAULT     COLORIZATION_MONOCHROMATIC
@@ -43,7 +43,7 @@
   #define  ILLUMINATION_DEFAULT     ILLUMINATION_DIFUSE
   #define  DETAIL_DEFAULT           DETAIL_COARSE
 
-  #ifdef EMU
+  #if defined(EMU)
     #define  ANIMATION_INTERVAL_MS    80
   #else
     #define  ANIMATION_INTERVAL_MS    50
@@ -60,7 +60,7 @@
 
 /* -----------   GRID/CAMERA PARAMETERS   ----------- */
 
-#ifdef PBL_PLATFORM_APLITE
+#if defined(PBL_PLATFORM_APLITE)
   #define  GRID_LINES     23
 #else
   #define  GRID_LINES     27

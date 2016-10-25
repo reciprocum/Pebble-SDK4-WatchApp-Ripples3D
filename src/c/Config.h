@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 11h05 October 04 2016  GMT
+   Last revision: 25 October 2016
 */
 
 #pragma once
@@ -15,7 +15,7 @@
 
 // Uncommenting the next line will enable GIF mode.
 #define  GIF
-#define  GIF_STOP_COUNT     531
+#define  GIF_STOP_COUNT     93
 
 // Commenting the next line will enable fast distro settings
 //#define EMU
@@ -23,7 +23,7 @@
 // Uncoment next line to use BASALT to "fake" running on APLITE/DIORITE B&W platforms with antialising on ;-)
 //#undef PBL_COLOR
 
-#ifdef LOG
+#if defined(LOG)
   #define LOGD(fmt, ...) APP_LOG(APP_LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
   #define LOGI(fmt, ...) APP_LOG(APP_LOG_LEVEL_INFO, fmt, ##__VA_ARGS__)
   #define LOGW(fmt, ...) APP_LOG(APP_LOG_LEVEL_WARNING, fmt, ##__VA_ARGS__)

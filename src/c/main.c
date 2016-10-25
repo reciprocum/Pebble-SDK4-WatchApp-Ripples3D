@@ -5,7 +5,7 @@
    Notes   : Dedicated to all the @PebbleDev team and to @KatharineBerry in particular
            : ... for her CloudPebble online dev environment that made this possible.
 
-   Last revision: 11h05 October 04 2016  GMT
+   Last revision: 25 October 2016
 */
 
 #include <pebble.h>
@@ -130,7 +130,7 @@ pattern_set
     break ;
   }
 
-  #ifndef PBL_COLOR
+  #if !defined(PBL_COLOR)
     invert_set( s_pattern != PATTERN_DOTS  &&  s_illumination != ILLUMINATION_SPOTLIGHT ) ;
   #endif
 }
@@ -310,7 +310,7 @@ illumination_set
 
   s_illumination = illumination ;
 
-  #ifndef PBL_COLOR
+  #if !defined(PBL_COLOR)
     invert_set( s_pattern != PATTERN_DOTS  &&  s_illumination != ILLUMINATION_SPOTLIGHT ) ;
   #endif
 }
@@ -425,7 +425,7 @@ cam_initialize
       s_cam_rotZangleSpeed = TRIG_MAX_ANGLE >> 9 ;   //  2 * PI / 512
       s_cam_rotXangleSpeed = 0 ;
 
-      #ifdef GIF
+      #if defined(GIF)
         s_cam_rotXangleSpeed = TRIG_MAX_ANGLE >> 11 ;
       #else
         s_cam_rotXangleSpeed = 0 ;
@@ -540,7 +540,7 @@ oscillator_set
       cam_config( s_cam_viewPoint, s_cam_rotZangle = 0, s_cam_rotXangle = 0 ) ;
       oscillator_position = Q2_origin ;   //  Initial position is center of grid.
 
-      #ifdef GIF
+      #if defined(GIF)
         Q2_set( &oscillator_speed, 3072, -1536 ) ;
       #else
         oscillator_speed = Q2_origin ;   //  No initial speed.
@@ -720,7 +720,7 @@ function_isVisible_fromPoint
 }
 
 
-#ifdef GIF
+#if defined(GIF)
   void world_update_timer_handler( void *data ) ;
 
   void
@@ -731,6 +731,15 @@ function_isVisible_fromPoint
   {
     if (s_world_updateTimer_ptr == NULL)
       s_world_updateTimer_ptr = app_timer_register( 0, world_update_timer_handler, NULL ) ;   // Schedule a world update.
+  }
+
+  void
+  gif_dummy_click_handler
+  ( ClickRecognizerRef recognizer
+  , void              *context
+  )
+  {
+    // Sole purpouse to have something awake the QEMU's "backlight" (to be able to take a brighter screen capture).
   }
 #else
   Sampler   *accelSampler_x = NULL ;    // To be allocated at accelSamplers_initialize( ).
@@ -759,9 +768,9 @@ function_isVisible_fromPoint
   accelSamplers_finalize
   ( )
   {
-    free( Sampler_free( accelSampler_x ) ) ; accelSampler_x = NULL ;
-    free( Sampler_free( accelSampler_y ) ) ; accelSampler_y = NULL ;
-    free( Sampler_free( accelSampler_z ) ) ; accelSampler_z = NULL ;
+    Sampler_free( accelSampler_x ) ;
+    Sampler_free( accelSampler_y ) ;
+    Sampler_free( accelSampler_z ) ;
   }
 
 
@@ -851,8 +860,7 @@ grid_initialize
 
   world_xMin = world_yMin = -grid_halfScale ;
   world_xMax = world_yMax = +grid_halfScale ;
-  world_zMin = -Q_1 ;
-  world_zMax = +Q_1 ;
+  world_zMin = -(world_zMax = Q_1 + Q_EPSILON) ;
 
   int l ;
   Q   lCoord ;
@@ -877,7 +885,7 @@ static GColor     s_color_stroke ;
 static GColor     s_color_background ;
 
 
-#ifdef PBL_COLOR
+#if defined(PBL_COLOR)
   static GColor  s_colorMap[8] ;
 
   void
@@ -887,14 +895,25 @@ static GColor     s_color_background ;
     s_color_stroke     = GColorWhite ;
     s_color_background = GColorBlack ;
 
-    s_colorMap[7] = GColorWhite ;
-    s_colorMap[6] = GColorMelon ;
-    s_colorMap[5] = GColorMagenta ;
-    s_colorMap[4] = GColorRed ;
-    s_colorMap[3] = GColorCyan ;
-    s_colorMap[2] = GColorYellow ;
-    s_colorMap[1] = GColorGreen ;
-    s_colorMap[0] = GColorVividCerulean ;
+    #if defined(GIF)
+      s_colorMap[7] = GColorOrange ;
+      s_colorMap[6] = GColorMelon ;
+      s_colorMap[5] = GColorMagenta ;
+      s_colorMap[4] = GColorRed ;
+      s_colorMap[3] = GColorCyan ;
+      s_colorMap[2] = GColorBlue ;
+      s_colorMap[1] = GColorGreen ;
+      s_colorMap[0] = GColorYellow ;
+    #else
+      s_colorMap[7] = GColorWhite ;
+      s_colorMap[6] = GColorMelon ;
+      s_colorMap[5] = GColorMagenta ;
+      s_colorMap[4] = GColorRed ;
+      s_colorMap[3] = GColorCyan ;
+      s_colorMap[2] = GColorYellow ;
+      s_colorMap[1] = GColorGreen ;
+      s_colorMap[0] = GColorVividCerulean ;
+    #endif
   }
 
 
@@ -1018,7 +1037,7 @@ world_initialize
   transparency_set( TRANSPARENCY_DEFAULT ) ;
   detail_set( DETAIL_DEFAULT ) ;
 
-#ifndef GIF
+#if !defined(GIF)
   accelSamplers_initialize( ) ;
 #endif
 
@@ -1188,7 +1207,7 @@ void
 position_setFromSensors
 ( Q2 *positionPtr )
 {
-  #ifdef GIF
+  #if defined(GIF)
     // Fixed point position for GIF generation.
     *positionPtr = Q2_origin ;
   #else
@@ -1232,7 +1251,7 @@ void
 viewPoint_setFromSensors
 ( Q3 *viewPointPtr )
 {
-  #ifdef GIF
+  #if defined(GIF)
     // Fixed point view for GIF generation.
     Q3_set( viewPointPtr, Q_from_float( -0.1f ), Q_from_float( +1.0f ), Q_from_float( +0.7f ) ) ;
   #else
@@ -1247,7 +1266,7 @@ viewPoint_setFromSensors
     }
     else
     {
-      #ifdef EMU
+      #if defined(EMU)
       if (ad.x == 0  &&  ad.y == 0  &&  ad.z == -1000)   // Under EMU with SENSORS off this is the default output.
       {
         Sampler_push( accelSampler_x,  -81 ) ;
@@ -1318,7 +1337,7 @@ oscillator_update
     break ;
 
     case OSCILLATOR_BOUNCING:
-      #ifndef GIF
+      #if !defined(GIF)
         //  1) set oscillator acceleration from sensor readings
         acceleration_setFromSensors( &oscillator_acceleration ) ;
   
@@ -1358,7 +1377,7 @@ oscillator_update
       grid_dist2osc_update( ) ;
 
       // 6) introduce some drag to dampen oscillator speed
-      #ifndef GIF
+      #if !defined(GIF)
         Q2 drag ;
         Q2_sub( &oscillator_speed, &oscillator_speed, Q2_sca( &drag, Q_1 >> OSCILLATOR_LUBRICATION_LEVEL, &oscillator_speed ) ) ;
       #endif
@@ -1392,7 +1411,7 @@ grid_major_drawPixel
 {
   for (int i = 0  ;  i < GRID_LINES  ;  ++i)
   {
-    const Q   grid_major_x_i = grid_major_x[i] << COORD_SHIFT ;
+//    const Q   grid_major_x_i = grid_major_x[i] << COORD_SHIFT ;
     
     for (int j = 0  ;  j < GRID_LINES  ;  ++j)
     {
@@ -1400,7 +1419,7 @@ grid_major_drawPixel
 
       if (f_visibility.cam)
       {
-        #ifdef PBL_COLOR
+        #if defined(PBL_COLOR)
           Fuxel f = (Fuxel){ .dist2osc   = grid_major_dist2osc[i][j] << DIST_SHIFT
                            , .visibility = f_visibility
                            }
@@ -1422,7 +1441,7 @@ grid_minor_drawPixel
 {
   for (int i = 0  ;  i < GRID_LINES-1  ;  i++)
   {
-    const Q   grid_minor_x_i = grid_minor_x[i] << COORD_SHIFT ;
+//    const Q   grid_minor_x_i = grid_minor_x[i] << COORD_SHIFT ;
     
     for (int j = 0  ;  j < GRID_LINES-1 ;  j++)
     {
@@ -1430,7 +1449,7 @@ grid_minor_drawPixel
 
       if (f_visibility.cam)
       {
-        #ifdef PBL_COLOR
+        #if defined(PBL_COLOR)
           Fuxel f = (Fuxel){ .dist2osc   = grid_minor_dist2osc[i][j] << DIST_SHIFT
                            , .visibility = f_visibility
                            }
@@ -1452,7 +1471,7 @@ grid_major_drawPixel_XRAY
 {
   for (int i = 0  ;  i < GRID_LINES  ;  ++i)
   {
-    const Q   grid_major_x_i = grid_major_x[i] << COORD_SHIFT ;
+//    const Q   grid_major_x_i = grid_major_x[i] << COORD_SHIFT ;
     
     for (int j = 0  ;  j < GRID_LINES  ;  ++j)
     {
@@ -1460,7 +1479,7 @@ grid_major_drawPixel_XRAY
 
       if (!f_visibility.cam)
       {
-        #ifdef PBL_COLOR
+        #if defined(PBL_COLOR)
           Fuxel f = (Fuxel){ .dist2osc   = grid_major_dist2osc[i][j] << DIST_SHIFT
                            , .visibility = f_visibility
                            }
@@ -1482,7 +1501,7 @@ grid_minor_drawPixel_XRAY
 {
   for (int i = 0  ;  i < GRID_LINES-1  ;  ++i)
   {
-    const Q   grid_minor_x_i = grid_minor_x[i] << COORD_SHIFT ;
+//    const Q   grid_minor_x_i = grid_minor_x[i] << COORD_SHIFT ;
     
     for (int j = 0  ;  j < GRID_LINES-1  ;  ++j)
     {
@@ -1490,7 +1509,7 @@ grid_minor_drawPixel_XRAY
 
       if (!f_visibility.cam)
       {
-        #ifdef PBL_COLOR
+        #if defined(PBL_COLOR)
           Fuxel f = (Fuxel){ .dist2osc   = grid_minor_dist2osc[i][j] << DIST_SHIFT
                            , .visibility = f_visibility
                            }
@@ -1517,7 +1536,7 @@ Fuxel_visualyIdentical
 
   if (s_detail == DETAIL_FINE)
   {
-    #ifdef PBL_COLOR
+    #if defined(PBL_COLOR)
       return gcolor_equal( f1Ptr->pen.color, f2Ptr->pen.color ) ;
     #else
       return (f1Ptr->pen.ink == f2Ptr->pen.ink) ;
@@ -1528,79 +1547,57 @@ Fuxel_visualyIdentical
 }
 
 
-/*
-Fuxel
-Fuxel_median
-( const Fuxel *f1Ptr
-, const Fuxel *f2Ptr
-)
-{
-  Fuxel  median ;
-    
-  median.world.x  = (f1Ptr->world.x + f2Ptr->world.x) >> 1 ;
-  median.world.y  = (f1Ptr->world.y + f2Ptr->world.y) >> 1 ;
-  median.dist2osc = oscillator_distance( median.world.x, median.world.y ) ;
-  median.world.z  = f_distance( median.dist2osc ) ;
-  Visibility_set( &median.visibility, median.world ) ;
-  screen_project( &median.screen, median.world ) ;
-
-  #ifdef PBL_COLOR
-    median.pen.color = Fuxel_color( &median ) ;
-  #else
-    median.pen.ink   = Fuxel_ink( &median ) ;
-  #endif
-
-  return median ;
-}
-*/
-
-
 void
 function_draw_line
-( GContext    *gCtx
-, const Fuxel  f0
-, const Fuxel  f1
-, const bool   zoomIn
+(       GContext *gCtx
+, const Fuxel    *f0Ptr
+, const Fuxel    *f1Ptr
+, const bool      zoomIn
 )
 {
-  if (f0.visibility.cam || f1.visibility.cam)    //  One of the points is visible ?
+  if (f0Ptr->visibility.cam || f1Ptr->visibility.cam)    //  One of the points is visible ?
   {
-    if (zoomIn || !Fuxel_visualyIdentical( &f0, &f1 ))   //  Is there any cam/spotlight terminator to find ?
+    if (zoomIn || !Fuxel_visualyIdentical( f0Ptr, f1Ptr ))   //  Is there any cam/spotlight terminator to find ?
     {
       // Calculate screen distance between f0 & f1.
-      int sdx = f0.screen.x - f1.screen.x  ;  if (sdx < 0) sdx = -sdx ;   // Abs delta screen x.
-      int sdy = f0.screen.y - f1.screen.y  ;  if (sdy < 0) sdy = -sdy ;   // Abs delta screen y.
+      int sdx = f0Ptr->screen.x - f1Ptr->screen.x  ;  if (sdx < 0) sdx = -sdx ;   // Abs delta screen x.
+      int sdy = f0Ptr->screen.y - f1Ptr->screen.y  ;  if (sdy < 0) sdy = -sdy ;   // Abs delta screen y.
     
       if ((sdx + sdy) > LINE_PRECISION_PXL)   // Screen distance still too far apart ?
       {
         // Need to recursively zoom in on.
         Fuxel  half ;
 
-        half.world.x  = (f0.world.x + f1.world.x) >> 1 ;
-        half.world.y  = (f0.world.y + f1.world.y) >> 1 ;
+        half.world.x  = (f0Ptr->world.x + f1Ptr->world.x) >> 1 ;
+        half.world.y  = (f0Ptr->world.y + f1Ptr->world.y) >> 1 ;
         half.dist2osc = oscillator_distance( half.world.x, half.world.y ) ;
         half.world.z  = f_distance( half.dist2osc ) ;
         Visibility_set( &half.visibility, half.world ) ;
         screen_project( &half.screen, half.world ) ;
       
-        #ifdef PBL_COLOR
+        #if defined(PBL_COLOR)
           half.pen.color = Fuxel_color( &half ) ;
         #else
           half.pen.ink   = Fuxel_ink( &half ) ;
         #endif
       
-        function_draw_line( gCtx, f0, half, zoomIn ) ;
-        function_draw_line( gCtx, half, f1, zoomIn ) ;
+        function_draw_line( gCtx, f0Ptr, &half, zoomIn ) ;
+        function_draw_line( gCtx, &half, f1Ptr, zoomIn ) ;
         return ;
       }
     }
   
-    // We reach this point because either there are no terminators between f0 & f1, or the screen distance is close enough to avoid needing to find them.
-    #ifdef PBL_COLOR
-      graphics_context_set_stroke_color( gCtx, f0.visibility.cam ? f0.pen.color : f1.pen.color ) ;
-      graphics_draw_line( gCtx, f0.screen, f1.screen ) ;
+    // We reach this point because either there are no color terminators between f0 & f1,
+    // or the screen distance is close enough to avoid needing to find them.
+    #if defined(PBL_COLOR)
+      graphics_context_set_stroke_color( gCtx, f0Ptr->visibility.cam ? f0Ptr->pen.color : f1Ptr->pen.color ) ;
+      graphics_draw_line( gCtx, f0Ptr->screen, f1Ptr->screen ) ;
     #else
-      Draw2D_line_pattern( gCtx, f0.screen.x, f0.screen.y, f1.screen.x, f1.screen.y, f0.visibility.cam ? f0.pen.ink : f1.pen.ink ) ;
+      Draw2D_line_pattern( gCtx
+                         , f0Ptr->screen.x, f0Ptr->screen.y
+                         , f1Ptr->screen.x, f1Ptr->screen.y
+                         , f0Ptr->visibility.cam ? f0Ptr->pen.ink : f1Ptr->pen.ink
+                         ) ;
     #endif
   }
 }
@@ -1626,7 +1623,7 @@ grid_major_drawLineX
               }
   ;
 
-  #ifdef PBL_COLOR
+  #if defined(PBL_COLOR)
     f1.pen.color = Fuxel_color( &f1 ) ;
   #else
     f1.pen.ink   = Fuxel_ink( &f1 ) ;
@@ -1646,16 +1643,16 @@ grid_major_drawLineX
                 }
     ;
 
-    #ifdef PBL_COLOR
+    #if defined(PBL_COLOR)
       f1.pen.color = Fuxel_color( &f1 ) ;
     #else
       f1.pen.ink   = Fuxel_ink( &f1 ) ;
     #endif
 
-    #ifdef GIF
-      function_draw_line( gCtx, f0, f1, true ) ;
+    #if defined(GIF)
+      function_draw_line( gCtx, &f0, &f1, true ) ;
     #else
-      function_draw_line( gCtx, f0, f1, false ) ;
+      function_draw_line( gCtx, &f0, &f1, false ) ;
     #endif
   }
 }
@@ -1681,7 +1678,7 @@ grid_major_drawLineY
               }
   ;
 
-  #ifdef PBL_COLOR
+  #if defined(PBL_COLOR)
     f1.pen.color = Fuxel_color( &f1 ) ;
   #else
     f1.pen.ink   = Fuxel_ink( &f1 ) ;
@@ -1701,16 +1698,16 @@ grid_major_drawLineY
                 }
     ;
 
-    #ifdef PBL_COLOR
+    #if defined(PBL_COLOR)
       f1.pen.color = Fuxel_color( &f1 ) ;
     #else
       f1.pen.ink   = Fuxel_ink( &f1 ) ;
     #endif
 
-    #ifdef GIF
-      function_draw_line( gCtx, f0, f1, true ) ;
+    #if defined(GIF)
+      function_draw_line( gCtx, &f0, &f1, true ) ;
     #else
-      function_draw_line( gCtx, f0, f1, false ) ;
+      function_draw_line( gCtx, &f0, &f1, false ) ;
     #endif
   }
 }
@@ -1772,7 +1769,7 @@ grid_minor_drawLineX
               }
   ;
 
-  #ifdef PBL_COLOR
+  #if defined(PBL_COLOR)
     f1.pen.color = Fuxel_color( &f1 ) ;
   #else
     f1.pen.ink   = Fuxel_ink( &f1 ) ;
@@ -1792,16 +1789,16 @@ grid_minor_drawLineX
                 }
     ;
 
-    #ifdef PBL_COLOR
+    #if defined(PBL_COLOR)
       f1.pen.color = Fuxel_color( &f1 ) ;
     #else
       f1.pen.ink   = Fuxel_ink( &f1 ) ;
     #endif
 
-    #ifdef GIF
-      function_draw_line( gCtx, f0, f1, true ) ;
+    #if defined(GIF)
+      function_draw_line( gCtx, &f0, &f1, true ) ;
     #else
-      function_draw_line( gCtx, f0, f1, false ) ;
+      function_draw_line( gCtx, &f0, &f1, false ) ;
     #endif
   }
 }
@@ -1862,11 +1859,11 @@ world_draw
 , GContext *gCtx
 )
 {
-#ifdef GIF
+#if defined(GIF)
   LOGD( "world_draw:: s_world_updateCount = %d", s_world_updateCount ) ;
 #endif
 
-#ifdef PBL_COLOR
+#if defined(PBL_COLOR)
   switch (s_detail)
   {
     case DETAIL_UNDEFINED:
@@ -1957,7 +1954,7 @@ world_stop
     s_world_updateTimer_ptr = NULL ;
   }
 
-#ifndef GIF
+#if !defined(GIF)
   // Stop clock.
   tick_timer_service_unsubscribe( ) ;
 
@@ -1971,7 +1968,7 @@ void
 world_finalize
 ( )
 {
-#ifndef GIF
+#if !defined(GIF)
   accelSamplers_finalize( ) ;
 #endif
 }
@@ -1984,14 +1981,14 @@ world_update_timer_handler
   s_world_updateTimer_ptr = NULL ;
   world_update( ) ;
 
-#ifdef GIF
+#if defined(GIF)
   if (s_world_updateCount < GIF_STOP_COUNT)
 #endif
   s_world_updateTimer_ptr = app_timer_register( ANIMATION_INTERVAL_MS, world_update_timer_handler, data ) ;
 }
 
 
-#ifndef GIF
+#if !defined(GIF)
   void
   tick_timer_service_handler
   ( struct tm *tick_time
@@ -2013,7 +2010,7 @@ void
 world_start
 ( )
 {
-  #ifndef GIF
+  #if !defined(GIF)
     // Gravity aware.
    	accel_data_service_subscribe( 0, accel_data_service_handler ) ;
   
@@ -2039,9 +2036,13 @@ click_config_provider
                                , (ClickHandler) pattern_change_click_handler
                                ) ;
 
-  #ifdef GIF
+  #if defined(GIF)
     window_single_click_subscribe( BUTTON_ID_DOWN
                                  , (ClickHandler) gifStepper_advance_click_handler
+                                 ) ;
+
+    window_single_click_subscribe( BUTTON_ID_BACK
+                                 , (ClickHandler) gif_dummy_click_handler
                                  ) ;
   #else
     window_single_click_subscribe( BUTTON_ID_DOWN
